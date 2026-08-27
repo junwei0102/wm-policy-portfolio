@@ -13,7 +13,7 @@ Read this file completely before submitting a job or editing the paper.
 
 | Item | Value |
 |---|---|
-| Repo | `/project/6067317/jwquan/wm-policy-portfolio` (this directory; **git has no commits yet** — see §9) |
+| Repo | `/project/6067317/jwquan/wm-policy-portfolio` (this directory; GitHub: `git@github.com:junwei0102/wm-policy-portfolio.git`, branch `main` — see §9) |
 | Paper | `WMPP_ICLR2027/main.tex` (Overleaf export; tables/figures auto-generated into `WMPP_ICLR2027/{tables,figures}/`) |
 | OGBench checkout | `/project/6067317/jwquan/ogbench` (v1.2.1, commit `1d41409`, never modified; `impls/` is imported via `OGBENCH_IMPLS`) |
 | Python env | `source /scratch/jwquan/wmpp/venv/bin/activate` (Python 3.10, JAX CPU/GPU, mujoco 3.1.6, matplotlib) |
@@ -361,8 +361,8 @@ margins, hence the 1-point rule in the paper). `U − best` explains the null ro
      cube-double-play, scene-noisy, puzzle-4x4-noisy, cube-single-play + one floor env;
    - qualitative timelines (policy chain, score traces) for 3 wins + 3 failures —
      data already exists in `episodes.csv:policy_chain` and could be plotted without new runs.
-3. Initial git commit + tag (`git add -A && git commit -m "WMPP: og50 protocol, 19-env results, ICLR draft"`)
-   so agents can use worktrees and the paper can cite a hash.
+3. ~~Initial git commit~~ DONE 2026-08-27: `37e350e` on `main`, pushed to
+   `github.com/junwei0102/wm-policy-portfolio`. Tag a release when the paper is frozen.
 4. Anonymous code release checklist (strip absolute paths from defaults in
    `scripts/*.py`, add `requirements.txt`).
 
@@ -379,8 +379,11 @@ margins, hence the 1-point rule in the paper). `U − best` explains the null ro
 
 ## 9. Repo hygiene
 
-No commit exists yet (`git status` shows everything untracked). Before agents
-work in parallel: commit, then use `git worktree` or feature branches; keep
-`WMPP_ICLR2027.zip` (the user's Overleaf export of 2026-08-25) untracked or
-delete it once `WMPP_ICLR2027/` is authoritative. `.gitignore` already excludes
-`wandb/`, `exp/`, `*.pkl`, `*.npz`, `logs/`.
+First commit `37e350e` (2026-08-27) on `main`; remote `origin` =
+`git@github.com:junwei0102/wm-policy-portfolio.git` (SSH auth as GitHub user
+`junwei0102`; no `gh` CLI on the cluster). Agents working in parallel should use
+`git worktree` or feature branches. `.gitignore` excludes `wandb/`, `exp/`,
+`*.pkl`, `*.npz`, `logs/`, `*.zip` (Overleaf exports), LaTeX build products
+including `main.pdf`, and `.claude/settings.local.json`; `WMPP_ICLR2027/` is the
+authoritative paper source. Dependencies: `requirements.txt` (the venv lacks
+`pytest`; install it there before running §3.6).
