@@ -1,0 +1,31 @@
+idx,env_name,algo,seed,flags
+1,cube-double-noisy-v0,gcbc,0,--agent=agents/gcbc.py
+2,cube-double-noisy-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+3,cube-double-noisy-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=0.03
+4,cube-double-noisy-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.03
+5,cube-double-noisy-v0,crl,0,--agent=agents/crl.py --agent.alpha=0.1
+6,cube-double-noisy-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+7,scene-play-v0,gcbc,0,--agent=agents/gcbc.py
+8,scene-play-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+9,scene-play-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=1.0
+10,scene-play-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.3
+11,scene-play-v0,crl,0,--agent=agents/crl.py --agent.alpha=3.0
+12,scene-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+13,scene-noisy-v0,gcbc,0,--agent=agents/gcbc.py
+14,scene-noisy-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+15,scene-noisy-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=0.03
+16,scene-noisy-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.03
+17,scene-noisy-v0,crl,0,--agent=agents/crl.py --agent.alpha=0.1
+18,scene-noisy-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+19,puzzle-4x4-play-v0,gcbc,0,--agent=agents/gcbc.py
+20,puzzle-4x4-play-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+21,puzzle-4x4-play-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=1.0
+22,puzzle-4x4-play-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.3
+23,puzzle-4x4-play-v0,crl,0,--agent=agents/crl.py --agent.alpha=3.0
+24,puzzle-4x4-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+25,puzzle-4x4-noisy-v0,gcbc,0,--agent=agents/gcbc.py
+26,puzzle-4x4-noisy-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+27,puzzle-4x4-noisy-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=0.03
+28,puzzle-4x4-noisy-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.03
+29,puzzle-4x4-noisy-v0,crl,0,--agent=agents/crl.py --agent.alpha=0.1
+30,puzzle-4x4-noisy-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10

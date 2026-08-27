@@ -1,0 +1,37 @@
+idx,env_name,algo,seed,flags
+1,antmaze-large-navigate-v0,gcbc,0,--agent=agents/gcbc.py
+2,antmaze-large-navigate-v0,gcbc,1,--agent=agents/gcbc.py
+3,antmaze-large-navigate-v0,gcbc,2,--agent=agents/gcbc.py
+4,antmaze-large-navigate-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+5,antmaze-large-navigate-v0,gcivl,1,--agent=agents/gcivl.py --agent.alpha=10.0
+6,antmaze-large-navigate-v0,gcivl,2,--agent=agents/gcivl.py --agent.alpha=10.0
+7,antmaze-large-navigate-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=0.3
+8,antmaze-large-navigate-v0,gciql,1,--agent=agents/gciql.py --agent.alpha=0.3
+9,antmaze-large-navigate-v0,gciql,2,--agent=agents/gciql.py --agent.alpha=0.3
+10,antmaze-large-navigate-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.003
+11,antmaze-large-navigate-v0,qrl,1,--agent=agents/qrl.py --agent.alpha=0.003
+12,antmaze-large-navigate-v0,qrl,2,--agent=agents/qrl.py --agent.alpha=0.003
+13,antmaze-large-navigate-v0,crl,0,--agent=agents/crl.py --agent.alpha=0.1
+14,antmaze-large-navigate-v0,crl,1,--agent=agents/crl.py --agent.alpha=0.1
+15,antmaze-large-navigate-v0,crl,2,--agent=agents/crl.py --agent.alpha=0.1
+16,antmaze-large-navigate-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0
+17,antmaze-large-navigate-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0
+18,antmaze-large-navigate-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0
+19,cube-double-play-v0,gcbc,0,--agent=agents/gcbc.py
+20,cube-double-play-v0,gcbc,1,--agent=agents/gcbc.py
+21,cube-double-play-v0,gcbc,2,--agent=agents/gcbc.py
+22,cube-double-play-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+23,cube-double-play-v0,gcivl,1,--agent=agents/gcivl.py --agent.alpha=10.0
+24,cube-double-play-v0,gcivl,2,--agent=agents/gcivl.py --agent.alpha=10.0
+25,cube-double-play-v0,gciql,0,--agent=agents/gciql.py --agent.alpha=1.0
+26,cube-double-play-v0,gciql,1,--agent=agents/gciql.py --agent.alpha=1.0
+27,cube-double-play-v0,gciql,2,--agent=agents/gciql.py --agent.alpha=1.0
+28,cube-double-play-v0,qrl,0,--agent=agents/qrl.py --agent.alpha=0.3
+29,cube-double-play-v0,qrl,1,--agent=agents/qrl.py --agent.alpha=0.3
+30,cube-double-play-v0,qrl,2,--agent=agents/qrl.py --agent.alpha=0.3
+31,cube-double-play-v0,crl,0,--agent=agents/crl.py --agent.alpha=3.0
+32,cube-double-play-v0,crl,1,--agent=agents/crl.py --agent.alpha=3.0
+33,cube-double-play-v0,crl,2,--agent=agents/crl.py --agent.alpha=3.0
+34,cube-double-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+35,cube-double-play-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+36,cube-double-play-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10

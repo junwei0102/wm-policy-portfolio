@@ -1,0 +1,6 @@
+idx,env_name,algo,seed,flags
+1,cube-triple-play-v0,gcbc,0,--agent=agents/gcbc.py
+2,cube-triple-play-v0,gcbc,1,--agent=agents/gcbc.py
+3,cube-triple-play-v0,gcbc,2,--agent=agents/gcbc.py
+4,cube-triple-play-v0,gcivl,0,--agent=agents/gcivl.py --agent.alpha=10.0
+5,cube-triple-play-v0,gcivl,1,--agent=agents/gcivl.py --agent.alpha=10.0

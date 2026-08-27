@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+wandb/
+exp/
+*.pkl
+*.npz
+slurm-*.out
+logs/
+
+# Overleaf export snapshots and LaTeX build products
+*.zip
+WMPP_ICLR2027/*.aux
+WMPP_ICLR2027/*.bbl
+WMPP_ICLR2027/*.blg
+WMPP_ICLR2027/*.fdb_latexmk
+WMPP_ICLR2027/*.fls
+WMPP_ICLR2027/*.log
+WMPP_ICLR2027/*.out
+WMPP_ICLR2027/*.synctex.gz
+WMPP_ICLR2027/main.pdf
+
+# Per-user Claude Code settings
+.claude/settings.local.json

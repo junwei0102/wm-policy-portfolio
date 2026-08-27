@@ -1,0 +1,890 @@
+{
+ "antmaze-large-navigate-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p1/OGBench/p1-pilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53931204.0.20260809_214708",
+  "wm_epoch": 900000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "crl-sd0",
+   "1": "qrl-sd1",
+   "2": "crl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.8560000000000001,
+   "crl-sd1": 0.876,
+   "crl-sd2": 0.836,
+   "gcbc-sd0": 0.24,
+   "gcbc-sd1": 0.22799999999999998,
+   "gcbc-sd2": 0.23199999999999998,
+   "gciql-sd0": 0.44000000000000006,
+   "gciql-sd1": 0.32399999999999995,
+   "gciql-sd2": 0.312,
+   "gcivl-sd0": 0.188,
+   "gcivl-sd1": 0.188,
+   "gcivl-sd2": 0.20400000000000001,
+   "hiql-sd0": 0.9040000000000001,
+   "hiql-sd1": 0.892,
+   "hiql-sd2": 0.9,
+   "qrl-sd0": 0.756,
+   "qrl-sd1": 0.812,
+   "qrl-sd2": 0.808
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.2333333333333333,
+   "gcivl": 0.19333333333333336,
+   "gciql": 0.3586666666666667,
+   "qrl": 0.7920000000000001,
+   "crl": 0.856,
+   "hiql": 0.8986666666666667
+  },
+  "best_policy_ogbench_test": "hiql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "cube-double-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53931199.0.20260809_214031",
+  "wm_epoch": 1000000,
+  "selected_k": 25,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.02,
+   "crl-sd1": 0.012,
+   "crl-sd2": 0.02,
+   "gcbc-sd0": 0.012,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.008,
+   "gciql-sd0": 0.26,
+   "gciql-sd1": 0.2,
+   "gciql-sd2": 0.27599999999999997,
+   "gcivl-sd0": 0.156,
+   "gcivl-sd1": 0.176,
+   "gcivl-sd2": 0.12000000000000002,
+   "hiql-sd0": 0.008,
+   "hiql-sd1": 0.02,
+   "hiql-sd2": 0.032,
+   "qrl-sd0": 0.012,
+   "qrl-sd1": 0.02,
+   "qrl-sd2": 0.024
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.006666666666666667,
+   "gcivl": 0.15066666666666664,
+   "gciql": 0.24533333333333332,
+   "qrl": 0.018666666666666668,
+   "crl": 0.017333333333333336,
+   "hiql": 0.02
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "cube-double-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p1/OGBench/p1-pilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53861556.0.20260809_050708",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gcivl-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.11200000000000002,
+   "crl-sd1": 0.076,
+   "crl-sd2": 0.1,
+   "gcbc-sd0": 0.02,
+   "gcbc-sd1": 0.016,
+   "gcbc-sd2": 0.024,
+   "gciql-sd0": 0.304,
+   "gciql-sd1": 0.376,
+   "gciql-sd2": 0.43200000000000005,
+   "gcivl-sd0": 0.352,
+   "gcivl-sd1": 0.356,
+   "gcivl-sd2": 0.356,
+   "hiql-sd0": 0.05600000000000001,
+   "hiql-sd1": 0.052000000000000005,
+   "hiql-sd2": 0.036,
+   "qrl-sd0": 0.004,
+   "qrl-sd1": 0.008,
+   "qrl-sd2": 0.004
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.02,
+   "gcivl": 0.3546666666666667,
+   "gciql": 0.3706666666666667,
+   "qrl": 0.005333333333333333,
+   "crl": 0.09600000000000002,
+   "hiql": 0.04800000000000001
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "cube-quadruple-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54607470.0.20260818_064236",
+  "wm_epoch": 1000000,
+  "selected_k": 50,
+  "best_fixed_per_seed": {
+   "0": "crl-sd0",
+   "1": "hiql-sd1",
+   "2": "hiql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.004,
+   "crl-sd1": 0.0,
+   "crl-sd2": 0.0,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.0,
+   "gciql-sd0": 0.0,
+   "gciql-sd1": 0.0,
+   "gciql-sd2": 0.0,
+   "gcivl-sd0": 0.0,
+   "gcivl-sd1": 0.0,
+   "gcivl-sd2": 0.0,
+   "hiql-sd0": 0.0,
+   "hiql-sd1": 0.0,
+   "hiql-sd2": 0.0,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.0,
+   "gcivl": 0.0,
+   "gciql": 0.0,
+   "qrl": 0.0,
+   "crl": 0.0013333333333333333,
+   "hiql": 0.0
+  },
+  "best_policy_ogbench_test": "crl",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "cube-quadruple-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p2/OGBench/p2-main",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53932060.0.20260809_220124",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gcivl-sd0",
+   "1": "crl-sd1",
+   "2": "crl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.0,
+   "crl-sd1": 0.0,
+   "crl-sd2": 0.0,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.0,
+   "gciql-sd0": 0.0,
+   "gciql-sd1": 0.0,
+   "gciql-sd2": 0.0,
+   "gcivl-sd0": 0.0,
+   "gcivl-sd1": 0.0,
+   "gcivl-sd2": 0.0,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.0,
+   "gcivl": 0.0,
+   "gciql": 0.0,
+   "qrl": 0.0,
+   "crl": 0.0
+  },
+  "best_policy_ogbench_test": "crl",
+  "bank_size": {
+   "0": 5,
+   "1": 5,
+   "2": 5
+  }
+ },
+ "cube-single-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_55797745.0.20260820_174306",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.45599999999999996,
+   "crl-sd1": 0.42800000000000005,
+   "crl-sd2": 0.384,
+   "gcbc-sd0": 0.068,
+   "gcbc-sd1": 0.10800000000000001,
+   "gcbc-sd2": 0.07200000000000001,
+   "gciql-sd0": 0.9879999999999999,
+   "gciql-sd1": 1.0,
+   "gciql-sd2": 1.0,
+   "gcivl-sd0": 0.7440000000000001,
+   "gcivl-sd1": 0.8280000000000001,
+   "gcivl-sd2": 0.5880000000000001,
+   "hiql-sd0": 0.356,
+   "hiql-sd1": 0.388,
+   "hiql-sd2": 0.5039999999999999,
+   "qrl-sd0": 0.336,
+   "qrl-sd1": 0.396,
+   "qrl-sd2": 0.22000000000000003
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.08266666666666668,
+   "gcivl": 0.7200000000000001,
+   "gciql": 0.996,
+   "qrl": 0.3173333333333333,
+   "crl": 0.4226666666666667,
+   "hiql": 0.4159999999999999
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "cube-single-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_55797743.0.20260820_174046",
+  "wm_epoch": 1000000,
+  "selected_k": 50,
+  "best_fixed_per_seed": {
+   "0": "gcivl-sd0",
+   "1": "gcivl-sd1",
+   "2": "gcivl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.0,
+   "crl-sd1": 0.0,
+   "crl-sd2": 0.0,
+   "gcbc-sd0": 0.06,
+   "gcbc-sd1": 0.07200000000000001,
+   "gcbc-sd2": 0.11200000000000002,
+   "gciql-sd0": 0.016,
+   "gciql-sd1": 0.016,
+   "gciql-sd2": 0.016,
+   "gcivl-sd0": 0.496,
+   "gcivl-sd1": 0.46799999999999997,
+   "gcivl-sd2": 0.5640000000000001,
+   "hiql-sd0": 0.096,
+   "hiql-sd1": 0.156,
+   "hiql-sd2": 0.092,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.08133333333333334,
+   "gcivl": 0.5093333333333333,
+   "gciql": 0.016,
+   "qrl": 0.0,
+   "crl": 0.0,
+   "hiql": 0.11466666666666665
+  },
+  "best_policy_ogbench_test": "gcivl",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "cube-triple-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p2/OGBench/p2-main",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54607461.0.20260813_205641",
+  "wm_epoch": 1000000,
+  "selected_k": 50,
+  "best_fixed_per_seed": {
+   "0": "gcivl-sd0",
+   "1": "gcivl-sd1",
+   "2": "gcivl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.008,
+   "crl-sd1": 0.0,
+   "crl-sd2": 0.032,
+   "gcbc-sd0": 0.048,
+   "gcbc-sd1": 0.02,
+   "gcbc-sd2": 0.012,
+   "gciql-sd0": 0.016,
+   "gciql-sd1": 0.032,
+   "gciql-sd2": 0.044,
+   "gcivl-sd0": 0.064,
+   "gcivl-sd1": 0.08,
+   "gcivl-sd2": 0.124,
+   "qrl-sd0": 0.036,
+   "qrl-sd1": 0.02,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.02666666666666667,
+   "gcivl": 0.08933333333333333,
+   "gciql": 0.030666666666666665,
+   "qrl": 0.018666666666666665,
+   "crl": 0.013333333333333334
+  },
+  "best_policy_ogbench_test": "gcivl",
+  "bank_size": {
+   "0": 5,
+   "1": 5,
+   "2": 5
+  }
+ },
+ "cube-triple-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p2/OGBench/p2-main",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54607460.0.20260813_205641",
+  "wm_epoch": 1000000,
+  "selected_k": 50,
+  "best_fixed_per_seed": {
+   "0": "crl-sd0",
+   "1": "crl-sd1",
+   "2": "crl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.024,
+   "crl-sd1": 0.044,
+   "crl-sd2": 0.052000000000000005,
+   "gcbc-sd0": 0.008,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.008,
+   "gciql-sd0": 0.016,
+   "gciql-sd1": 0.012,
+   "gciql-sd2": 0.048,
+   "gcivl-sd0": 0.008,
+   "gcivl-sd1": 0.008,
+   "gcivl-sd2": 0.016,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gciql": 0.025333333333333333,
+   "qrl": 0.0,
+   "crl": 0.04,
+   "gcbc": 0.005333333333333333,
+   "gcivl": 0.010666666666666666
+  },
+  "best_policy_ogbench_test": "crl",
+  "bank_size": {
+   "0": 5,
+   "1": 5,
+   "2": 5
+  }
+ },
+ "humanoidmaze-giant-navigate-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p2/OGBench/p2-main",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53932061.0.20260809_225354",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gcbc-sd0",
+   "1": "crl-sd1",
+   "2": "crl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.039999999999999994,
+   "crl-sd1": 0.06400000000000002,
+   "crl-sd2": 0.064,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.0,
+   "gciql-sd0": 0.0,
+   "gciql-sd1": 0.004,
+   "gciql-sd2": 0.0,
+   "gcivl-sd0": 0.004,
+   "gcivl-sd1": 0.004,
+   "gcivl-sd2": 0.0,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.012,
+   "qrl-sd2": 0.004
+  },
+  "ogbench_test_family_mean": {
+   "gcivl": 0.0026666666666666666,
+   "gciql": 0.0013333333333333333,
+   "qrl": 0.005333333333333333,
+   "crl": 0.056,
+   "gcbc": 0.0
+  },
+  "best_policy_ogbench_test": "crl",
+  "bank_size": {
+   "0": 5,
+   "1": 5,
+   "2": 5
+  }
+ },
+ "puzzle-3x3-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54662965.0.20260818_064939",
+  "wm_epoch": 1000000,
+  "selected_k": 100,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.316,
+   "crl-sd1": 0.268,
+   "crl-sd2": 0.308,
+   "gcbc-sd0": 0.004,
+   "gcbc-sd1": 0.032,
+   "gcbc-sd2": 0.012,
+   "gciql-sd0": 0.9359999999999999,
+   "gciql-sd1": 0.9119999999999999,
+   "gciql-sd2": 0.8959999999999999,
+   "gcivl-sd0": 0.624,
+   "gcivl-sd1": 0.26,
+   "gcivl-sd2": 0.24000000000000005,
+   "hiql-sd0": 0.524,
+   "hiql-sd1": 0.6719999999999999,
+   "hiql-sd2": 0.62,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.004
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.016,
+   "gcivl": 0.3746666666666667,
+   "gciql": 0.9146666666666666,
+   "qrl": 0.0013333333333333333,
+   "crl": 0.2973333333333334,
+   "hiql": 0.6053333333333333
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "puzzle-3x3-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_55797746.0.20260820_174306",
+  "wm_epoch": 1000000,
+  "selected_k": 50,
+  "best_fixed_per_seed": {
+   "0": "hiql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.11600000000000002,
+   "crl-sd1": 0.05600000000000001,
+   "crl-sd2": 0.172,
+   "gcbc-sd0": 0.012,
+   "gcbc-sd1": 0.008,
+   "gcbc-sd2": 0.008,
+   "gciql-sd0": 0.06,
+   "gciql-sd1": 0.156,
+   "gciql-sd2": 0.192,
+   "gcivl-sd0": 0.044,
+   "gcivl-sd1": 0.039999999999999994,
+   "gcivl-sd2": 0.064,
+   "hiql-sd0": 0.084,
+   "hiql-sd1": 0.11600000000000002,
+   "hiql-sd2": 0.188,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.009333333333333334,
+   "gcivl": 0.04933333333333333,
+   "gciql": 0.136,
+   "qrl": 0.0,
+   "crl": 0.11466666666666668,
+   "hiql": 0.12933333333333333
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "puzzle-4x4-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53931203.0.20260809_214422",
+  "wm_epoch": 1000000,
+  "selected_k": 25,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.0,
+   "crl-sd1": 0.0,
+   "crl-sd2": 0.0,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.0,
+   "gciql-sd0": 0.41999999999999993,
+   "gciql-sd1": 0.36,
+   "gciql-sd2": 0.32,
+   "gcivl-sd0": 0.22000000000000003,
+   "gcivl-sd1": 0.2,
+   "gcivl-sd2": 0.21200000000000002,
+   "hiql-sd0": 0.15999999999999998,
+   "hiql-sd1": 0.21999999999999997,
+   "hiql-sd2": 0.084,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "hiql": 0.15466666666666665,
+   "gcbc": 0.0,
+   "gcivl": 0.2106666666666667,
+   "gciql": 0.36666666666666664,
+   "qrl": 0.0,
+   "crl": 0.0
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "puzzle-4x4-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p2/OGBench/p2-main",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53931202.0.20260809_214422",
+  "wm_epoch": 1000000,
+  "selected_k": 100,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.016,
+   "crl-sd1": 0.0,
+   "crl-sd2": 0.004,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.004,
+   "gcbc-sd2": 0.004,
+   "gciql-sd0": 0.2,
+   "gciql-sd1": 0.24,
+   "gciql-sd2": 0.276,
+   "gcivl-sd0": 0.07600000000000001,
+   "gcivl-sd1": 0.132,
+   "gcivl-sd2": 0.12399999999999997,
+   "qrl-sd0": 0.008,
+   "qrl-sd1": 0.004,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.0026666666666666666,
+   "gcivl": 0.11066666666666665,
+   "gciql": 0.23866666666666667,
+   "qrl": 0.004,
+   "crl": 0.006666666666666667
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 5,
+   "1": 5,
+   "2": 5
+  }
+ },
+ "puzzle-4x5-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54662966.0.20260818_064939",
+  "wm_epoch": 1000000,
+  "selected_k": 25,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gcivl-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.02,
+   "crl-sd1": 0.052000000000000005,
+   "crl-sd2": 0.068,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.0,
+   "gciql-sd0": 0.188,
+   "gciql-sd1": 0.188,
+   "gciql-sd2": 0.2,
+   "gcivl-sd0": 0.2,
+   "gcivl-sd1": 0.196,
+   "gcivl-sd2": 0.192,
+   "hiql-sd0": 0.04,
+   "hiql-sd1": 0.02,
+   "hiql-sd2": 0.032,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.0,
+   "gcivl": 0.19600000000000004,
+   "gciql": 0.19200000000000003,
+   "qrl": 0.0,
+   "crl": 0.04666666666666667,
+   "hiql": 0.030666666666666665
+  },
+  "best_policy_ogbench_test": "gcivl",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "puzzle-4x5-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54662910.0.20260818_064450",
+  "wm_epoch": 1000000,
+  "selected_k": 50,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.096,
+   "crl-sd1": 0.04,
+   "crl-sd2": 0.092,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.008,
+   "gcbc-sd2": 0.004,
+   "gciql-sd0": 0.088,
+   "gciql-sd1": 0.10400000000000001,
+   "gciql-sd2": 0.11599999999999999,
+   "gcivl-sd0": 0.076,
+   "gcivl-sd1": 0.052000000000000005,
+   "gcivl-sd2": 0.076,
+   "hiql-sd0": 0.052000000000000005,
+   "hiql-sd1": 0.052000000000000005,
+   "hiql-sd2": 0.016,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.004,
+   "gcivl": 0.068,
+   "gciql": 0.10266666666666667,
+   "qrl": 0.0,
+   "crl": 0.076,
+   "hiql": 0.04
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "puzzle-4x6-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_55797747.0.20260820_175157",
+  "wm_epoch": 1000000,
+  "selected_k": 100,
+  "best_fixed_per_seed": {
+   "0": "gcivl-sd0",
+   "1": "gcivl-sd1",
+   "2": "gcivl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.064,
+   "crl-sd1": 0.02,
+   "crl-sd2": 0.024,
+   "gcbc-sd0": 0.004,
+   "gcbc-sd1": 0.0,
+   "gcbc-sd2": 0.0,
+   "gciql-sd0": 0.02,
+   "gciql-sd1": 0.004,
+   "gciql-sd2": 0.004,
+   "gcivl-sd0": 0.10400000000000001,
+   "gcivl-sd1": 0.088,
+   "gcivl-sd2": 0.092,
+   "hiql-sd0": 0.028000000000000004,
+   "hiql-sd1": 0.039999999999999994,
+   "hiql-sd2": 0.039999999999999994,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0,
+   "qrl-sd2": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.0013333333333333333,
+   "gcivl": 0.09466666666666668,
+   "gciql": 0.009333333333333334,
+   "qrl": 0.0,
+   "crl": 0.036000000000000004,
+   "hiql": 0.036
+  },
+  "best_policy_ogbench_test": "gcivl",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "scene-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53931201.0.20260809_214422",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gcivl-sd0",
+   "1": "gcivl-sd1",
+   "2": "gcivl-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.0,
+   "crl-sd1": 0.008,
+   "crl-sd2": 0.012,
+   "gcbc-sd0": 0.02,
+   "gcbc-sd1": 0.016,
+   "gcbc-sd2": 0.004,
+   "gciql-sd0": 0.264,
+   "gciql-sd1": 0.284,
+   "gciql-sd2": 0.3,
+   "gcivl-sd0": 0.30400000000000005,
+   "gcivl-sd1": 0.316,
+   "gcivl-sd2": 0.34,
+   "hiql-sd0": 0.2800000000000001,
+   "hiql-sd1": 0.21200000000000002,
+   "hiql-sd2": 0.26399999999999996,
+   "qrl-sd0": 0.064,
+   "qrl-sd1": 0.128,
+   "qrl-sd2": 0.04
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.013333333333333336,
+   "gcivl": 0.32000000000000006,
+   "gciql": 0.2826666666666667,
+   "qrl": 0.07733333333333334,
+   "crl": 0.006666666666666667,
+   "hiql": 0.252
+  },
+  "best_policy_ogbench_test": "gcivl",
+  "bank_size": {
+   "0": 6,
+   "1": 6,
+   "2": 6
+  }
+ },
+ "scene-play-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/p2/OGBench/p2-main",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_53931200.0.20260809_214031",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1",
+   "2": "gciql-sd2"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.21600000000000003,
+   "crl-sd1": 0.22000000000000003,
+   "crl-sd2": 0.19999999999999998,
+   "gcbc-sd0": 0.07200000000000001,
+   "gcbc-sd1": 0.032,
+   "gcbc-sd2": 0.036,
+   "gciql-sd0": 0.44400000000000006,
+   "gciql-sd1": 0.5519999999999999,
+   "gciql-sd2": 0.4600000000000001,
+   "gcivl-sd0": 0.376,
+   "gcivl-sd1": 0.4600000000000001,
+   "gcivl-sd2": 0.376,
+   "qrl-sd0": 0.05600000000000001,
+   "qrl-sd1": 0.068,
+   "qrl-sd2": 0.044
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.04666666666666667,
+   "gcivl": 0.4040000000000001,
+   "gciql": 0.48533333333333334,
+   "qrl": 0.056,
+   "crl": 0.212
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 5,
+   "1": 5,
+   "2": 5
+  }
+ },
+ "puzzle-4x6-noisy-v0": {
+  "policy_root": "/scratch/jwquan/wmpp/policies/mpilot/OGBench/mpilot",
+  "policy_epoch": 1000000,
+  "wm_dir": "/scratch/jwquan/wmpp/wm/wmogbench/wm-value-lavl/sd000_s_54662967.0.20260818_065232",
+  "wm_epoch": 1000000,
+  "selected_k": 10,
+  "best_fixed_per_seed": {
+   "0": "gciql-sd0",
+   "1": "gciql-sd1"
+  },
+  "ogbench_test_success": {
+   "crl-sd0": 0.048,
+   "crl-sd1": 0.032,
+   "gcbc-sd0": 0.0,
+   "gcbc-sd1": 0.0,
+   "gciql-sd0": 0.188,
+   "gciql-sd1": 0.164,
+   "gcivl-sd0": 0.16,
+   "gcivl-sd1": 0.148,
+   "hiql-sd0": 0.02,
+   "hiql-sd1": 0.024,
+   "qrl-sd0": 0.0,
+   "qrl-sd1": 0.0
+  },
+  "ogbench_test_family_mean": {
+   "gcbc": 0.0,
+   "gcivl": 0.154,
+   "gciql": 0.176,
+   "qrl": 0.0,
+   "crl": 0.04,
+   "hiql": 0.022
+  },
+  "best_policy_ogbench_test": "gciql",
+  "bank_size": {
+   "0": 6,
+   "1": 6
+  }
+ }
+}

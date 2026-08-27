@@ -1,0 +1,30 @@
+\begin{tabular}{llcccc}
+\toprule
+Family & Dataset & Best Policy & Success Rate & Random Switch & WMPP (Ours) \\
+\midrule
+\multirow{2}{*}{Maze} & \texttt{antmaze-large-navigate} & HIQL & $\mathbf{90.3 \pm 1.3}$ & $\mathbf{88.3 \pm 2.4}$ & $\mathbf{92.5 \pm 0.2}$ \\
+ & \texttt{humanoidmaze-giant-navigate} & CRL & $\mathbf{5.2 \pm 2.9}$ & $2.3 \pm 1.4$ & $4.3 \pm 1.8$ \\
+\midrule
+\multirow{8}{*}{Cube} & \texttt{cube-single-play} & GCIVL & $\mathbf{49.3 \pm 0.2}$ & $11.9 \pm 3.6$ & $45.6 \pm 2.9$ \\
+ & \texttt{cube-single-noisy} & GCIQL & $\mathbf{99.1 \pm 0.5}$ & $\mathbf{95.9 \pm 1.9}$ & $\mathbf{99.9 \pm 0.2}$ \\
+ & \texttt{cube-double-play} & GCIQL & $36.1 \pm 5.6$ & $19.7 \pm 1.3$ & $\mathbf{72.8 \pm 1.8}$ \\
+ & \texttt{cube-double-noisy} & GCIQL & $25.6 \pm 7.3$ & $26.8 \pm 1.3$ & $\mathbf{60.4 \pm 5.3}$ \\
+ & \texttt{cube-triple-play} & CRL & $\mathbf{4.8 \pm 2.7}$ & $3.2 \pm 1.5$ & $3.9 \pm 2.2$ \\
+ & \texttt{cube-triple-noisy} & GCIVL & $9.2 \pm 2.4$ & $14.7 \pm 1.8$ & $\mathbf{18.8 \pm 2.1}$ \\
+ & \texttt{cube-quadruple-play} & QRL & $0.0 \pm 0.0$ & $0.0 \pm 0.0$ & $0.0 \pm 0.0$ \\
+ & \texttt{cube-quadruple-noisy} & CRL & $0.1 \pm 0.2$ & $\mathbf{0.9 \pm 0.7}$ & $0.8 \pm 0.6$ \\
+\midrule
+\multirow{2}{*}{Scene} & \texttt{scene-play} & GCIQL & $51.9 \pm 2.9$ & $41.5 \pm 2.0$ & $\mathbf{91.2 \pm 0.9}$ \\
+ & \texttt{scene-noisy} & GCIVL & $29.6 \pm 1.0$ & $44.8 \pm 3.8$ & $\mathbf{70.7 \pm 4.5}$ \\
+\midrule
+\multirow{7}{*}{Puzzle} & \texttt{puzzle-3x3-play} & GCIQL & $14.0 \pm 5.3$ & $15.7 \pm 2.4$ & $\mathbf{20.4 \pm 3.1}$ \\
+ & \texttt{puzzle-3x3-noisy} & GCIQL & $\mathbf{91.5 \pm 1.4}$ & $73.1 \pm 4.6$ & $\mathbf{93.9 \pm 1.9}$ \\
+ & \texttt{puzzle-4x4-play} & GCIQL & $24.1 \pm 3.4$ & $9.3 \pm 2.0$ & $\mathbf{26.7 \pm 4.3}$ \\
+ & \texttt{puzzle-4x4-noisy} & GCIQL & $34.0 \pm 3.8$ & $46.0 \pm 4.1$ & $\mathbf{53.6 \pm 3.7}$ \\
+ & \texttt{puzzle-4x5-play} & GCIQL & $10.9 \pm 2.4$ & $6.4 \pm 0.9$ & $\mathbf{13.2 \pm 2.0}$ \\
+ & \texttt{puzzle-4x5-noisy} & GCIVL & $\mathbf{19.9 \pm 0.2}$ & $11.5 \pm 0.7$ & $\mathbf{20.0 \pm 0.3}$ \\
+ & \texttt{puzzle-4x6-play} & GCIVL & $11.3 \pm 0.2$ & $6.3 \pm 1.0$ & $\mathbf{13.6 \pm 1.1}$ \\
+\midrule
+\multicolumn{3}{l}{Average (19 datasets)} & $31.9$ & $27.3$ & $\mathbf{42.2}$ \\
+\bottomrule
+\end{tabular}
