@@ -56,12 +56,58 @@ class _EpisodeLog:
             value_evals=self.val_calls,
         )
 
+class _DecisionLog:
+    """Optional per-decision record (state, goal, scores, winner) for analysis
+    figures. Only allocated when a planner is built with log_decisions=True;
+    never touches the decision itself or any RNG."""
+
+    def __init__(self):
+        self.rows = []
+
+    def record(self, t, ob, goal, scores, winner, explore=False):
+        self.rows.append((int(t), np.asarray(ob, dtype=np.float32).copy(),
+                          np.asarray(goal, dtype=np.float32).copy(),
+                          np.asarray(scores, dtype=np.float32).copy(), int(winner), bool(explore)))
+
+    def pop(self):
+        rows, self.rows = self.rows, []
+        if not rows:
+            return None
+        return dict(
+            t=np.array([r[0] for r in rows], dtype=np.int32),
+            obs=np.stack([r[1] for r in rows]),
+            goal=np.stack([r[2] for r in rows]),
+            scores=np.stack([r[3] for r in rows]),
+            winner=np.array([r[4] for r in rows], dtype=np.int32),
+            explore=np.array([r[5] for r in rows], dtype=bool),
+        )
+
+
 def _lexi_argmax(primary, secondary):
     """Argmax of primary; exact ties broken by secondary; then lowest index."""
     best = np.flatnonzero(primary == primary.max())
     if len(best) == 1:
         return int(best[0])
     return int(best[np.argmax(secondary[best])])
+
+
+ENS_AGGS = ('mean', 'min', 'lcb')
+
+
+def _ens_reduce(vals_e, ens_agg):
+    """Collapse the ensemble axis of an (E, ...) value array.
+
+    mean — ensemble mean (paper default, eq. 12);
+    min  — pessimistic: worst member;
+    lcb  — mean minus one std over members (disagreement-penalised).
+    """
+    if ens_agg == 'mean':
+        return vals_e.mean(axis=0)
+    if ens_agg == 'min':
+        return vals_e.min(axis=0)
+    if ens_agg == 'lcb':
+        return vals_e.mean(axis=0) - vals_e.std(axis=0)
+    raise ValueError(ens_agg)
 
 
 class OneStepChooser:
@@ -133,14 +179,21 @@ class RolloutRanker:
         score_mode='progress',
         score_agg='max',
         explore_every=None,
+        ens_agg='mean',
+        critic_fn=None,
+        log_decisions=False,
     ):
         self.wm = wm
         self.bank = dict(sorted(bank.items()))
         self.counter = counter
         self.horizon = horizon
+        self._dec = _DecisionLog() if log_decisions else None
         self.replan_every = replan_every or horizon
         self.names = list(self.bank)
         self.progress_fn = progress_fn
+        # Ensemble reduction BEFORE the horizon aggregation (eq. 12 uses the mean).
+        assert ens_agg in ENS_AGGS, ens_agg
+        self.ens_agg = ens_agg
         # Scheduled exploration: at a replan boundary reached >= explore_every
         # env steps after the last exploration, commit to the LEAST-USED policy
         # of the episode (ties among least-used broken by the model score)
@@ -157,9 +210,15 @@ class RolloutRanker:
         # only). 'value': the learned LAVL value head ALONE — score is the best
         # (over horizon, ensemble-mean) -d(s, g) toward the goal; no
         # task-dimension knowledge anywhere.
-        assert score_mode in ('progress', 'value'), score_mode
+        # 'critic': a bank member's own V(s, g) (e.g. GCIQL's IQL value) applied
+        # to every candidate's imagined raw states -- an ablation of the LAVL
+        # metric head that keeps dynamics, horizon, and commitment identical.
+        assert score_mode in ('progress', 'value', 'critic'), score_mode
         if score_mode == 'value':
             assert wm.config['value_head'], 'WM was trained without a value head'
+        if score_mode == 'critic':
+            assert critic_fn is not None, 'score_mode=critic needs critic_fn(states, goals) -> (N,)'
+        self.critic_fn = critic_fn
         self.score_mode = score_mode
         self.reset_episode()
 
@@ -170,11 +229,17 @@ class RolloutRanker:
         self._usage = {n: 0 for n in self.names}
         self._steps_since_explore = 0
         self._n_explore = 0
+        self._t = 0  # env steps taken in this episode (decision log only)
+        if self._dec is not None:
+            self._dec.rows = []
 
     def episode_info(self):
         info = self._log.info()
         info['n_explore'] = self._n_explore
         return info
+
+    def pop_decisions(self):
+        return self._dec.pop() if self._dec is not None else None
 
     def _agg_horizon(self, scores_hp):
         """(H, P) per-step ensemble-mean scores -> (P,) via self.score_agg."""
@@ -198,7 +263,13 @@ class RolloutRanker:
             goals_e = np.broadcast_to(goal, traj_e.shape[:-1] + goal.shape[-1:])
             vals = np.asarray(self.wm.value_score(traj_e, goals_e))  # (E, H*P)
             self._log.val_calls += H * E * P
-            scores = self._agg_horizon(vals.reshape(E, H, P).mean(axis=0))  # (P,)
+            scores = self._agg_horizon(_ens_reduce(vals.reshape(E, H, P), self.ens_agg))  # (P,)
+        elif self.score_mode == 'critic':
+            flat = traj.reshape(H * E * P, -1)  # raw imagined states
+            goals_flat = np.broadcast_to(goal, flat.shape[:-1] + goal.shape[-1:])
+            vals = np.asarray(self.critic_fn(flat, goals_flat)).reshape(H, E, P)
+            self._log.val_calls += H * E * P
+            scores = self._agg_horizon(_ens_reduce(np.moveaxis(vals, 1, 0), self.ens_agg))  # (P,)
         elif self.progress_fn is not None:
             flat = traj.reshape(H * E * P, -1)
             goals_flat = np.broadcast_to(goal, flat.shape)
@@ -216,18 +287,23 @@ class RolloutRanker:
             winner = int(cand[_lexi_argmax(scores[cand], np.arange(len(cand), 0, -1.0))])
             self._steps_since_explore = 0
             self._n_explore += 1
+            explored = True
         else:
             winner = _lexi_argmax(scores, np.arange(len(self.names), 0, -1.0))
+            explored = False
         self._current = self.names[winner]
         self._steps_since_replan = 0
         self._log.n_plans += 1
         self._log.plan_seconds += time.perf_counter() - t0
+        if self._dec is not None:
+            self._dec.record(self._t, ob, goal, scores, winner, explored)
 
     def act(self, ob, goal, temperature=0.0):
         if self._steps_since_replan is None or self._steps_since_replan >= self.replan_every:
             self._replan(np.asarray(ob, dtype=np.float32), np.asarray(goal, dtype=np.float32))
         self._steps_since_replan += 1
         self._steps_since_explore += 1
+        self._t += 1
         self._usage[self._current] += 1
         self._log.record_step(self._current)
         # Winner runs closed-loop on the REAL observation.
@@ -250,12 +326,13 @@ class RandomArbiter:
     yields the same schedule regardless of evaluation order.
     """
 
-    def __init__(self, bank, commit, seed=0):
+    def __init__(self, bank, commit, seed=0, log_decisions=False):
         assert commit >= 1, commit
         self.bank = dict(sorted(bank.items()))
         self.names = list(self.bank)
         self.commit = int(commit)
         self.seed = int(seed)
+        self._dec = _DecisionLog() if log_decisions else None
         self.reset_episode()
 
     def reset_episode(self):
@@ -263,9 +340,15 @@ class RandomArbiter:
         self._current = None
         self._rng = None
         self._log = _EpisodeLog()
+        self._t = 0
+        if self._dec is not None:
+            self._dec.rows = []
 
     def episode_info(self):
         return self._log.info()
+
+    def pop_decisions(self):
+        return self._dec.pop() if self._dec is not None else None
 
     def _seed_rng(self, ob, goal):
         import hashlib
@@ -288,7 +371,63 @@ class RandomArbiter:
             self._seed_rng(ob, goal)
         if self._steps_since_draw is None or self._steps_since_draw >= self.commit:
             self._draw()
+            if self._dec is not None:
+                self._dec.record(self._t, ob, goal, np.full(len(self.names), np.nan),
+                                 self.names.index(self._current), False)
         self._steps_since_draw += 1
+        self._t += 1
+        self._log.record_step(self._current)
+        return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
+
+
+class CriticSelectArbiter:
+    """Model-free arbitration by an action-value critic: no imagined states.
+
+    At every arbitration boundary (every `commit` real env steps, starting at
+    the first step) each bank member proposes its action a_i = pi_i(s, g) at
+    the CURRENT state, one critic scores them, i* = argmax_i q_fn(s, a_i, g),
+    and pi_{i*} runs closed-loop for `commit` steps. With GCIQL's twin heads
+    q_fn = min_j Q_j (FrozenPolicy.q_min) this is the zero-rollout counterpart
+    of the direct-value WMPP cell: same critic family, same candidates, same
+    commitment, no dynamics model. Dynamics-call count is exactly zero; value
+    calls are P per decision.
+    """
+
+    def __init__(self, bank, q_fn, commit, seed=0):
+        assert commit >= 1, commit
+        self.bank = dict(sorted(bank.items()))
+        self.names = list(self.bank)
+        self.q_fn = q_fn
+        self.commit = int(commit)
+        self.seed = int(seed)  # unused (deterministic); kept for interface symmetry
+        self.reset_episode()
+
+    def reset_episode(self):
+        self._steps_since_select = None
+        self._current = None
+        self._log = _EpisodeLog()
+
+    def episode_info(self):
+        return self._log.info()
+
+    def _select(self, ob, goal):
+        t0 = time.perf_counter()
+        ob = np.asarray(ob, dtype=np.float32)
+        goal = np.asarray(goal, dtype=np.float32)
+        acts = np.stack([np.clip(np.asarray(self.bank[n].act(ob, goal)), -1, 1) for n in self.names])  # (P, da)
+        P = len(self.names)
+        q = np.asarray(self.q_fn(np.broadcast_to(ob, (P,) + ob.shape), np.broadcast_to(goal, (P,) + goal.shape), acts),
+                       dtype=np.float64).reshape(P)
+        self._log.val_calls += P
+        self._current = self.names[_lexi_argmax(q, np.arange(P, 0, -1.0))]
+        self._steps_since_select = 0
+        self._log.n_plans += 1
+        self._log.plan_seconds += time.perf_counter() - t0
+
+    def act(self, ob, goal, temperature=0.0):
+        if self._steps_since_select is None or self._steps_since_select >= self.commit:
+            self._select(ob, goal)
+        self._steps_since_select += 1
         self._log.record_step(self._current)
         return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
 
@@ -318,10 +457,26 @@ class PolicyMPC:
     """
 
     def __init__(self, wm, policy, policy_name, counter, n_samples, sigma,
-                 horizon, replan_every=1, score_agg='max', seed=0):
+                 horizon, replan_every=1, score_agg='max', seed=0, candidates='gauss', ens_agg='mean',
+                 critic_fn=None):
         assert n_samples >= 1 and horizon >= 1 and replan_every >= 1
-        assert wm.config['value_head'], 'PolicyMPC scores with the value head'
+        # critic_fn(states, goals) -> (N,): score imagined states with a bank member's own value
+        # (the paper's direct value) instead of the world model's metric head.
+        self.critic_fn = critic_fn
+        assert critic_fn is not None or wm.config['value_head'], 'PolicyMPC scores with the value head'
         assert score_agg in ('max', 'mean', 'last'), score_agg
+        assert ens_agg in ENS_AGGS, ens_agg
+        self.ens_agg = ens_agg
+        # candidates='gauss': candidate 0 = policy mean, others = clip(mu + sigma*eps).
+        # candidates='samples': the policy proposes its own candidates via
+        # policy.sample_candidates(ob, goal, n, rng) (candidate 0 = its
+        # deterministic decode, others = draws from its action distribution;
+        # used for a distributional student, see distill/students.py). Scoring,
+        # commit and budget are identical in both modes.
+        assert candidates in ('gauss', 'samples'), candidates
+        if candidates == 'samples':
+            assert hasattr(policy, 'sample_candidates'), 'policy must implement sample_candidates(ob, goal, n, rng)'
+        self.candidates = candidates
         self.wm = wm
         self.policy = policy
         self.policy_name = policy_name
@@ -368,18 +523,28 @@ class PolicyMPC:
         from world_model.rollout import imagine_mpc_rollout
 
         t0 = time.perf_counter()
-        mean = np.clip(np.asarray(self.policy.act(ob[None], goal[None]))[0], -1, 1)  # (da,)
-        eps = self._rng.standard_normal((self.n_samples - 1, mean.shape[-1])).astype(np.float32)
-        cands = np.concatenate([mean[None], np.clip(mean[None] + self.sigma * eps, -1, 1)], axis=0)  # (N, da)
+        if self.candidates == 'samples':
+            cands = np.clip(np.asarray(self.policy.sample_candidates(ob, goal, self.n_samples, self._rng),
+                                       dtype=np.float32), -1, 1)  # (N, da), candidate 0 = deterministic decode
+            assert cands.shape[0] == self.n_samples, cands.shape
+        else:
+            mean = np.clip(np.asarray(self.policy.act(ob[None], goal[None]))[0], -1, 1)  # (da,)
+            eps = self._rng.standard_normal((self.n_samples - 1, mean.shape[-1])).astype(np.float32)
+            cands = np.concatenate([mean[None], np.clip(mean[None] + self.sigma * eps, -1, 1)], axis=0)  # (N, da)
         roll = imagine_mpc_rollout(self.wm, self.policy, ob, goal, cands, self.horizon, self.counter)
         traj = roll['obs_traj'][1:]  # (H, E, N, d)
         H, E, N = traj.shape[:3]
         self._log.dyn_calls += H * E * N
-        traj_e = np.moveaxis(traj, 1, 0).reshape(E, H * N, -1)
-        goals_e = np.broadcast_to(goal, traj_e.shape[:-1] + goal.shape[-1:])
-        vals = np.asarray(self.wm.value_score(traj_e, goals_e))  # (E, H*N)
+        if self.critic_fn is not None:
+            flat = traj.reshape(H * E * N, -1)
+            vals = np.asarray(self.critic_fn(flat, np.broadcast_to(goal, flat.shape[:-1] + goal.shape[-1:])))
+            vals = np.moveaxis(vals.reshape(H, E, N), 1, 0)  # (E, H, N)
+        else:
+            traj_e = np.moveaxis(traj, 1, 0).reshape(E, H * N, -1)
+            goals_e = np.broadcast_to(goal, traj_e.shape[:-1] + goal.shape[-1:])
+            vals = np.asarray(self.wm.value_score(traj_e, goals_e)).reshape(E, H, N)
         self._log.val_calls += H * E * N
-        scores = self._agg_horizon(vals.reshape(E, H, N).mean(axis=0))  # (N,)
+        scores = self._agg_horizon(_ens_reduce(vals, self.ens_agg))  # (N,)
         self.counter.mark_decision()
         winner = _lexi_argmax(scores, np.arange(N, 0, -1.0))
         self._committed = cands[winner]
@@ -530,10 +695,12 @@ class PortfolioMPC:
     """
 
     def __init__(self, wm, bank, counter, n_per, sigma, horizon, replan_every=1,
-                 score_agg='max', seed=0):
+                 score_agg='max', seed=0, ens_agg='mean'):
         assert n_per >= 1 and horizon >= 1 and replan_every >= 1
         assert wm.config['value_head'], 'PortfolioMPC scores with the value head'
         assert score_agg in ('max', 'mean', 'last'), score_agg
+        assert ens_agg in ENS_AGGS, ens_agg
+        self.ens_agg = ens_agg
         self.wm = wm
         self.bank = dict(sorted(bank.items()))
         self.names = list(self.bank)
@@ -592,7 +759,7 @@ class PortfolioMPC:
         goals_e = np.broadcast_to(goal, traj_e.shape[:-1] + goal.shape[-1:])
         vals = np.asarray(self.wm.value_score(traj_e, goals_e))  # (E, H*B)
         self._log.val_calls += H * E * B
-        scores = self._agg_horizon(vals.reshape(E, H, B).mean(axis=0))  # (B,)
+        scores = self._agg_horizon(_ens_reduce(vals.reshape(E, H, B), self.ens_agg))  # (B,)
         self.counter.mark_decision()
         winner = _lexi_argmax(scores, np.arange(B, 0, -1.0))
         i, j = divmod(winner, self.n_per)
@@ -615,4 +782,73 @@ class PortfolioMPC:
         self._log.record_step(self._current)
         if first:
             return self._committed
+        return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
+
+
+class StallRestartArbiter:
+    """No-model restart heuristic (reviewer-requested control): keep the current
+    policy while the state keeps moving; when the normalised displacement over
+    the last `window` env steps falls below `eps`, switch to a uniformly random
+    OTHER bank policy (restart). Displacement is measured in the world model's
+    normalised observation space (per-dimension std of the dataset), so `eps`
+    is dimensionless. Starts with a uniform draw; zero model / value calls;
+    RNG seeded per episode like RandomArbiter.
+    """
+
+    def __init__(self, bank, obs_mean, obs_std, window, eps=0.05, seed=0):
+        assert window >= 1 and eps >= 0
+        self.bank = dict(sorted(bank.items()))
+        self.names = list(self.bank)
+        self.obs_mean = np.asarray(obs_mean, np.float32)
+        self.obs_std = np.asarray(obs_std, np.float32)
+        self.window = int(window)
+        self.eps = float(eps)
+        self.seed = int(seed)
+        self.reset_episode()
+
+    def reset_episode(self):
+        self._current = None
+        self._rng = None
+        self._hist = []
+        self._steps_since_switch = 0
+        self._n_restarts = 0
+        self._log = _EpisodeLog()
+
+    def episode_info(self):
+        info = self._log.info()
+        info['n_restarts'] = self._n_restarts
+        return info
+
+    def _seed_rng(self, ob, goal):
+        import hashlib
+
+        h = hashlib.sha256()
+        h.update(np.int64(self.seed).tobytes())
+        h.update(np.asarray(ob, dtype=np.float32).tobytes())
+        h.update(np.asarray(goal, dtype=np.float32).tobytes())
+        self._rng = np.random.default_rng(int.from_bytes(h.digest()[:8], 'little'))
+
+    def _stalled(self, z):
+        if len(self._hist) < self.window or self._steps_since_switch < self.window:
+            return False
+        return float(np.linalg.norm(z - self._hist[-self.window])) < self.eps
+
+    def act(self, ob, goal, temperature=0.0):
+        ob = np.asarray(ob, dtype=np.float32)
+        goal = np.asarray(goal, dtype=np.float32)
+        if self._rng is None:
+            self._seed_rng(ob, goal)
+            self._current = self.names[int(self._rng.integers(len(self.names)))]
+        z = (ob - self.obs_mean) / self.obs_std
+        if self._stalled(z):
+            t0 = time.perf_counter()
+            others = [n for n in self.names if n != self._current]
+            self._current = others[int(self._rng.integers(len(others)))]
+            self._steps_since_switch = 0
+            self._n_restarts += 1
+            self._log.n_plans += 1
+            self._log.plan_seconds += time.perf_counter() - t0
+        self._hist.append(z)
+        self._steps_since_switch += 1
+        self._log.record_step(self._current)
         return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)

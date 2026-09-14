@@ -12,6 +12,7 @@ with eval.csv) and a trained world model, this script
        * og50   : WMPP diagonal k=c in {1,5,10,25,50,100} + Random at every c
                   (planners only, --skip_fixed), and
        * og50fx : every fixed bank policy on the same episodes (static oracle),
+       * og50val: (with --val) the og50 sweep on the held-out episodes 50..99,
      and submits them with --submit (job ids appended to SUBMISSIONS.log).
 
 Usage:
@@ -45,6 +46,9 @@ flags.DEFINE_string('env_config', os.path.join(ROOT, 'manifests', 'wmpp_env_conf
 flags.DEFINE_string('launcher_dir', '/scratch/jwquan/wmpp/launchers', 'Where launch_*.sh and SUBMISSIONS.log live.')
 flags.DEFINE_string('time_og50', '4:00:00', 'Walltime of the og50 (planner) jobs.')
 flags.DEFINE_string('time_og50fx', '2:00:00', 'Walltime of the og50fx (fixed policies) jobs.')
+flags.DEFINE_bool('val', False, 'Also emit og50val jobs: the same k=c sweep + Random on the held-out episodes 50..99 '
+                  '(--episode_range=50:100), used by scripts/derive_family_cells.py for the per-family interval.')
+flags.DEFINE_string('time_og50val', '4:00:00', 'Walltime of the og50val (held-out sweep) jobs.')
 flags.DEFINE_string('exclude', 'fc30554,fc30560,fc30572,fc30657', 'Bad CPU nodes.')
 flags.DEFINE_bool('submit', False, 'Submit the generated sbatch lines.')
 flags.DEFINE_bool('allow_incomplete', False, 'Proceed even if some (algo, seed) runs are missing.')
@@ -122,6 +126,9 @@ def main(_):
               f'--episodes_per_task=50 --out_tag=og50fx')
         lines.append(SBATCH.format(time=FLAGS.time_og50, exclude=FLAGS.exclude, name=f'wmpp-og50-{short}-sd{s}', cmd=og50))
         lines.append(SBATCH.format(time=FLAGS.time_og50fx, exclude=FLAGS.exclude, name=f'wmpp-og50fx-{short}-sd{s}', cmd=fx))
+        if FLAGS.val:
+            val = og50.replace('--out_tag=og50', '--episode_range=50:100 --out_tag=og50val')
+            lines.append(SBATCH.format(time=FLAGS.time_og50val, exclude=FLAGS.exclude, name=f'wmpp-og50val-{short}-sd{s}', cmd=val))
     os.makedirs(FLAGS.launcher_dir, exist_ok=True)
     launcher = os.path.join(FLAGS.launcher_dir, f'launch_og50_{short}.sh')
     with open(launcher, 'w') as f:
@@ -142,7 +149,7 @@ def main(_):
             print(out.stdout.strip() or out.stderr.strip())
             ids.append(out.stdout.strip().split()[-1] if out.returncode == 0 else f'FAILED:{name}')
         with open(os.path.join(FLAGS.launcher_dir, 'SUBMISSIONS.log'), 'a') as f:
-            f.write(f'{time.strftime("%F %T")} {FLAGS.env_name}: og50 + og50fx via onboard_env.py ids={" ".join(ids)}\n')
+            f.write(f'{time.strftime("%F %T")} {FLAGS.env_name}: og50 + og50fx{" + og50val" if FLAGS.val else ""} via onboard_env.py ids={" ".join(ids)}\n')
     else:
         print('[onboard] dry run; re-run with --submit to launch.')
 

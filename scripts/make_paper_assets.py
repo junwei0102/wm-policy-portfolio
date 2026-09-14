@@ -30,9 +30,13 @@ Usage:
 import csv
 import json
 import os
+import sys
 
 import numpy as np
 from absl import app, flags
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from paper_common import bh, fmt_ci, fmt_pm_ci, half_width, hier_boot, holm, macro_key, near_top, paired_rows, rows_by_policy, wm_val_rank_corr  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FLAGS = flags.FLAGS
@@ -40,15 +44,24 @@ flags.DEFINE_string('report', '/scratch/jwquan/wmpp/planner_eval/og50_final_swee
 flags.DEFINE_string('env_config', os.path.join(ROOT, 'manifests', 'wmpp_env_config.json'), 'Env config.')
 flags.DEFINE_string('eval_root', '/scratch/jwquan/wmpp/planner_eval', 'Planner eval root.')
 flags.DEFINE_string('out_dir', os.path.join(ROOT, 'WMPP_ICLR2027'), 'Paper root (tables/, figures/).')
-flags.DEFINE_string('main_tags', 'og50,og50k5,og50r1', 'Dir tags holding the official-protocol runs.')
+flags.DEFINE_string('main_tags', 'og50,og50k5,og50r1,og50cr', 'Dir tags holding the official-protocol runs.')
+flags.DEFINE_string('lavl_family_k', 'maze:1,cube:5,scene:10,puzzle:100',
+                    'Held-out-selected interval of the LAVL head per family (the LAVL-only rule); used for the '
+                    'scorer-ablation table where a family reports the critic scorer instead.')
+flags.DEFINE_string('critic_tag', 'og50cr', 'Tag of the critic-scorer diagonal on the test episodes (puzzles).')
+flags.DEFINE_string('critic_ctrl_tag', 'og50qv', 'Tag holding critic-scorer rows on the control datasets.')
+flags.DEFINE_string('critic_ctrl_envs', 'scene-play-v0,cube-double-play-v0', 'Control datasets for the scorer ablation.')
 flags.DEFINE_string('oracle_tag', 'og50fx', 'Dir tag whose runs include every fixed bank policy on the og50 '
                     'episode set (5x50 per seed).')
 flags.DEFINE_string('oracle_fallback_tag', 'abl', 'Fallback tag (5x20 per seed) used per env while og50fx runs are missing.')
+flags.DEFINE_string('extras_dir', '/scratch/jwquan/wmpp/planner_eval/paper_extras',
+                    'Where the full k=c sweep table and profile figure are kept for the record; '
+                    'the draft itself carries only the settings table (tables/settings.tex).')
 
 NAME = {'hiql': 'HIQL', 'gciql': 'GCIQL', 'gcivl': 'GCIVL', 'crl': 'CRL', 'gcbc': 'GCBC', 'qrl': 'QRL'}
 ALGOS = ['gcbc', 'gcivl', 'gciql', 'qrl', 'crl', 'hiql']
 FAMILIES = [
-    ('Maze', ['pointmaze-medium-navigate-v0', 'antmaze-large-navigate-v0', 'humanoidmaze-giant-navigate-v0']),
+    ('Maze', ['pointmaze-medium-navigate-v0', 'antmaze-large-navigate-v0']),
     ('Cube', ['cube-single-play-v0', 'cube-single-noisy-v0', 'cube-double-play-v0', 'cube-double-noisy-v0',
               'cube-triple-play-v0', 'cube-triple-noisy-v0', 'cube-quadruple-play-v0', 'cube-quadruple-noisy-v0']),
     ('Scene', ['scene-play-v0', 'scene-noisy-v0']),
@@ -92,7 +105,7 @@ def per_seed_means(eval_root, env, variant, tags, seeds=(0, 1, 2)):
 def static_oracle(eval_root, env, tag, seeds=(0, 1, 2)):
     """Fixed-policy stats on identical episodes: per-family mean and the
     'best policy per episode' union success (static per-episode oracle)."""
-    fam_means, unions = {}, []
+    fam_means, unions, union_by_ep, fam_eps = {}, [], {}, {}
     for sd in seeds:
         p = os.path.join(eval_root, env, f'bank_sd{sd}_{tag}', 'episodes.csv')
         if not os.path.exists(p):
@@ -108,25 +121,38 @@ def static_oracle(eval_root, env, tag, seeds=(0, 1, 2)):
             by_ep.setdefault(key, []).append(float(r['success']))
             fam_rows.setdefault(fam, []).append(float(r['success']))
         unions.append(np.mean([max(v) for v in by_ep.values()]))
+        union_by_ep[sd] = {k: max(v) for k, v in by_ep.items()}
         for fam, v in fam_rows.items():
             fam_means.setdefault(fam, []).append(np.mean(v))
+            fam_eps.setdefault(fam, {})[sd] = np.array(v)
     fam_means = {f: float(np.mean(v)) for f, v in fam_means.items()}
     best_fam = max(fam_means, key=fam_means.get)
     return dict(union=float(np.mean(unions)), fam_means=fam_means, best=best_fam, best_mean=fam_means[best_fam],
-                n_episodes_per_seed=len(by_ep))
+                n_episodes_per_seed=len(by_ep), union_by_ep=union_by_ep, fam_eps=fam_eps)
+
+
+def per_episode_success(eval_root, env, variant, tags, seeds=(0, 1, 2)):
+    """{seed: {(task_id, episode_idx): success}} of one planner variant across the main tag dirs."""
+    out = {}
+    for sd in seeds:
+        d = {}
+        for tag in tags:
+            p = os.path.join(eval_root, env, f'bank_sd{sd}_{tag}', 'episodes.csv')
+            if os.path.exists(p):
+                for r in read_rows(p):
+                    if r['policy'] == variant:
+                        d[(r['task_id'], r['episode_idx'])] = float(r['success'])
+        out[sd] = d
+    return out
 
 
 def fmt_pm(mean, std, bold=False):
-    s = f'{mean:.1f} \\pm {std:.1f}'
+    s = f'{mean:.0f} \\pm {std:.0f}'
     return f'$\\mathbf{{{s}}}$' if bold else f'${s}$'
 
 
-def near_top(v, top, frac=0.95):
-    """OGBench convention: bold every entry at or above `frac` of the row maximum."""
-    return top > 0 and v >= frac * top - 1e-9
 
-
-def fmt(x, bold=False, nd=1):
+def fmt(x, bold=False, nd=0):
     s = f'{x:.{nd}f}'
     return f'$\\mathbf{{{s}}}$' if bold else f'${s}$'
 
@@ -139,6 +165,11 @@ def main(_):
     tdir, fdir = os.path.join(FLAGS.out_dir, 'tables'), os.path.join(FLAGS.out_dir, 'figures')
     os.makedirs(tdir, exist_ok=True)
     os.makedirs(fdir, exist_ok=True)
+    os.makedirs(FLAGS.extras_dir, exist_ok=True)
+    for stale in (os.path.join(FLAGS.extras_dir, 'kc_sweep.tex'), os.path.join(fdir, 'kc_profiles.pdf')):
+        if os.path.exists(stale):
+            os.remove(stale)
+            print('[assets] removed from draft (kept in extras_dir):', stale)
 
     envs = [e for _, es in FAMILIES for e in es if e in byenv]
     missing = [e for _, es in FAMILIES for e in es if e not in byenv]
@@ -158,12 +189,19 @@ def main(_):
         r = per_seed_means(FLAGS.eval_root, env, x['methods']['Random']['variant'], tags)
         assert abs(w.mean() - x['methods']['WMPP']['success']) < 1e-6, env
         assert abs(r.mean() - x['methods']['Random']['success']) < 1e-6, env
+        _pref = 'critic' if (x.get('validation') or {}).get('scorer') == 'critic' else 'score'
         R[env] = dict(
             best=bp, best_seeds=bp_seeds, wmpp_seeds=w, rand_seeds=r,
             k=x['selected_k'], c=x['methods']['Random']['commit'],
             dW=x['contrasts']['WMPP_vs_best_policy'], dR=x['contrasts']['Random_vs_best_policy'],
             dWR=x['contrasts']['WMPP_vs_Random'],
-            diag={int(k.split('score')[1].split('_')[0]): v for k, v in x['diagonal'].items()},
+            p_best=x['contrasts']['WMPP_vs_best_policy'].get('p_value'),
+            p_rand=x['contrasts']['WMPP_vs_Random'].get('p_value'),
+            select_rule=x.get('select_rule', 'test'), validation=x.get('validation'),
+            scorer=(x.get('validation') or {}).get('scorer', 'lavl'),
+            # the reported scorer's own diagonal (LAVL: score{k}_commit{k}; critic: critic{k}_commit{k})
+            diag={int(k.split('_commit')[0].replace(_pref, '')): v for k, v in x['diagonal'].items()
+                  if k.startswith(_pref)},
             rand_c={int(k.replace('random_commit', '')): v for k, v in x['random_by_commit'].items()},
             fam=x['fixed_test_success'], m=x['methods'],
             official_fam=x.get('official_fixed_test_success', envcfg[env]['ogbench_test_family_mean']),
@@ -177,29 +215,65 @@ def main(_):
             print(f'[assets] {env}: oracle from fallback tag {FLAGS.oracle_fallback_tag} (og50fx runs not complete)')
         assert R[env]['oracle'] is not None, f'{env}: no fixed-policy runs under {FLAGS.oracle_tag} or {FLAGS.oracle_fallback_tag}'
 
-    # ---- main table ------------------------------------------------------------
+    # ---- main table: every bank policy (family mean, paired episodes) + WMPP ----
     lines = []
+    col_vals = {a: [] for a in ALGOS}
+    wmpp_vals, best_vals = [], []
     for fam, fenvs in FAMILIES:
         fenvs = [e for e in fenvs if e in R]
         if not fenvs:
             continue
         for i, env in enumerate(fenvs):
             d = R[env]
-            vals = {k: (d[k + '_seeds'].mean() * 100, d[k + '_seeds'].std() * 100) for k in ('best', 'rand', 'wmpp')}
-            top = max(v[0] for v in vals.values())
-            # Per-dataset significance of the WMPP gain is reported in the running text (numbers.tex macros), not in the table.
+            vals = {a: (100 * d['fam'][a] if a in d['fam'] else None) for a in ALGOS}
+            w_mean = 100 * d['wmpp_seeds'].mean()
+            top = max([v for v in vals.values() if v is not None] + [w_mean])
             famcell = f'\\multirow{{{len(fenvs)}}}{{*}}{{{fam}}}' if i == 0 else ''
-            cells = [fmt_pm(*vals[k], bold=near_top(vals[k][0], top)) for k in ('best', 'rand', 'wmpp')]
-            lines.append(' & '.join([famcell, tex_env(env), NAME[d['best']]] + cells) + ' \\\\')
+            fam_eps = d['oracle'].get('fam_eps', {})
+            cells, hw = [], {}
+            for a in ALGOS:
+                if vals[a] is None:
+                    cells.append('--')
+                elif a in fam_eps and len(fam_eps[a]) == 3:
+                    hw[a] = half_width(fam_eps[a])
+                    cells.append(fmt_pm_ci(vals[a], hw[a], bold=near_top(vals[a], top)))
+                else:
+                    cells.append(fmt(vals[a], bold=near_top(vals[a], top)))
+            # NB: use THIS env's reported variant (d['m']); `x` here is the stale row of the last env.
+            wep = per_episode_success(FLAGS.eval_root, env, d['m']['WMPP']['variant'], tags)
+            assert all(len(v) == d['oracle']['n_episodes_per_seed'] for v in wep.values()), \
+                (env, d['m']['WMPP']['variant'], {sd: len(v) for sd, v in wep.items()}, 'WMPP rows missing for the CI')
+            w_half = half_width({sd: np.array(list(v.values())) for sd, v in wep.items()})
+            d['w_half'] = w_half
+            d['b_half'] = hw.get(d['best'])
+            # best fixed policy of this dataset (the report's best family; its mean is \MeanBest's input)
+            b_name = d['best']; b_mean = 100 * float(d['best_seeds'].mean())
+            if b_name in hw:  # same bootstrap draw as the policy's own cell, so the two columns agree
+                cells.append(fmt_pm_ci(b_mean, hw[b_name], bold=near_top(b_mean, top)))
+            else:
+                cells.append(fmt(b_mean, bold=near_top(b_mean, top)))
+            cells.append(fmt_pm_ci(w_mean, w_half, bold=near_top(w_mean, top)))
+            lines.append(' & '.join([famcell, tex_env(env)] + cells) + ' \\\\')
+            for a in ALGOS:
+                if vals[a] is not None:
+                    col_vals[a].append(vals[a])
+            best_vals.append(b_mean)
+            wmpp_vals.append(w_mean)
         lines.append('\\midrule')
-    avg = {k: np.mean([R[e][k + '_seeds'].mean() * 100 for e in envs]) for k in ('best', 'rand', 'wmpp')}
+    avg = {a: np.mean(col_vals[a]) for a in ALGOS if col_vals[a]}
+    avg['wmpp'] = np.mean(wmpp_vals)
     topavg = max(avg.values())
-    lines.append(' & '.join([f'\\multicolumn{{3}}{{l}}{{Average ({len(envs)} datasets)}}']
-                            + [fmt(avg[k], bold=near_top(avg[k], topavg)) for k in ('best', 'rand', 'wmpp')]) + ' \\\\')
+    avg_cells = ['--' if a not in avg else fmt(avg[a], bold=near_top(avg[a], topavg)) for a in ALGOS]
+    avg_cells.append(fmt(np.mean(best_vals), bold=near_top(np.mean(best_vals), topavg)))
+    avg_cells.append(fmt(avg['wmpp'], bold=near_top(avg['wmpp'], topavg)))
+    lines.append(' & '.join([f'\\multicolumn{{2}}{{l}}{{Average ({len(wmpp_vals)} datasets)}}'] + avg_cells) + ' \\\\')
     with open(os.path.join(tdir, 'main_results.tex'), 'w') as f:
-        f.write('\\begin{tabular}{llcccc}\n\\toprule\n'
-                'Family & Dataset & Best Policy & Success Rate & Random Switch & WMPP (Ours) \\\\\n\\midrule\n'
+        f.write('\\begin{tabular}{ll' + 'c' * len(ALGOS) + 'cc}\n\\toprule\n'
+                'Family & Dataset & ' + ' & '.join(NAME[a] for a in ALGOS) + ' & \\bestfixed{} & \\wmpp{} \\\\\n\\midrule\n'
                 + '\n'.join(lines) + '\n\\bottomrule\n\\end{tabular}\n')
+    # macro-averages of the three headline quantities (best family per dataset, Random at its family interval, WMPP)
+    avg = {k: np.mean([R[e][k + '_seeds'].mean() * 100 for e in envs]) for k in ('best', 'rand', 'wmpp')}
+    macros_hiql_n = len(col_vals['hiql'])
 
     # ---- k=c sweep table -------------------------------------------------------
     rows = []
@@ -226,22 +300,76 @@ def main(_):
         # OGBench convention across Random at every c AND WMPP: bold >= 95% of
         # the row maximum; the interval paired with WMPP in the main table
         # (the selected c) is underlined.
-        top = max([v * 100 for v in d['rand_c'].values() if v == v] + [wm])
         if best_rand > wm + 1e-9:
             n_rand_beats += 1
-        for k in KS:
-            v = d['rand_c'].get(k)
-            if v is None or v != v:
-                cells.append('--')
-            else:
-                cell = fmt(v * 100, bold=near_top(v * 100, top))
-                cells.append(f'\\underline{{{cell}}}' if k == d['c'] else cell)
-        rows.append(' & '.join([tex_env(env)] + cells + [fmt(wm, bold=near_top(wm, top)), fmt(best_rand - wm, nd=1)]) + ' \\\\')
+        # Only the interval actually used (the family value, shared with WMPP) is
+        # reported; the full sweep over c is computed but not tabulated.
+        rv = d['rand_c'].get(d['c'])
+        rv = rv * 100 if rv is not None and rv == rv else None
+        top = max([wm] + ([rv] if rv is not None else []))
+        rep_ = per_episode_success(FLAGS.eval_root, env, d['m']['Random']['variant'], tags)
+        r_half = half_width({sd: np.array(list(v.values())) for sd, v in rep_.items()}) if all(rep_.values()) else None
+        cells = [f"${d['c']}$",
+                 '--' if rv is None else (fmt_pm_ci(rv, r_half, bold=near_top(rv, top)) if r_half is not None else fmt(rv, bold=near_top(rv, top))),
+                 fmt_pm_ci(wm, d['w_half'], bold=near_top(wm, top))]
+        rows.append(' & '.join([tex_env(env)] + cells) + ' \\\\')
     with open(os.path.join(tdir, 'random_by_c.tex'), 'w') as f:
-        f.write('\\begin{tabular}{l' + 'c' * len(KS) + 'cc}\n\\toprule\nDataset & '
-                + ' & '.join(f'$c{{=}}{k}$' for k in KS)
-                + ' & \\wmpp & best Random $-$ \\wmpp \\\\\n\\midrule\n'
+        f.write('\\begin{tabular}{lccc}\n\\toprule\n'
+                'Dataset & $c$ & \\randomswitch & \\wmpp \\\\\n\\midrule\n'
                 + '\n'.join(rows) + '\n\\bottomrule\n\\end{tabular}\n')
+
+    # ---- scorer ablation: LAVL metric head vs a bank member's own critic ----------
+    # Puzzle datasets report the critic in the main table (their family's value head);
+    # here both scorers are shown at their own held-out-selected interval, with the
+    # paired per-episode difference. Two geometric-manipulation datasets serve as
+    # controls (critic at the family interval, from the critic sweep tag).
+    lavl_k = {a: int(b) for a, b in (x.split(':') for x in FLAGS.lavl_family_k.split(','))}
+    ctrl = [e for e in FLAGS.critic_ctrl_envs.split(',') if e in R]
+    fam_of = {e: f.lower() for f, es in FAMILIES for e in es}
+    scorer_macros, srows, n_sig_puz, deltas_puz, n_worse_ctrl = {}, [], 0, [], 0
+    rng_sc = np.random.default_rng(3)
+    for env in [e for e in envs if R[e]['scorer'] == 'critic'] + ctrl:
+        env_dir = os.path.join(FLAGS.eval_root, env)
+        is_ctrl = env in ctrl
+        kl = lavl_k[fam_of[env]]
+        kc = R[env]['k']                       # critic k* (puzzles) / family k (controls)
+        ctag = FLAGS.critic_ctrl_tag if is_ctrl else FLAGS.critic_tag
+        per_seed, lv, cv = {}, [], []
+        for sd in (0, 1, 2):
+            a = rows_by_policy(env_dir, sd, ctag).get(f'critic{kc}_commit{kc}')
+            b = rows_by_policy(env_dir, sd, 'og50').get(f'score{kl}_commit{kl}')
+            if not a or not b:
+                continue
+            per_seed[sd] = paired_rows(a, b)
+            cv.append(np.mean([float(r['success']) for r in a])); lv.append(np.mean([float(r['success']) for r in b]))
+        best = 100 * float(R[env]['best_seeds'].mean())  # R[env]['best'] is the policy NAME
+        if len(per_seed) == 3:
+            c = hier_boot(per_seed, 2000, rng_sc)
+            key = macro_key(env)
+            scorer_macros[f'ScorerDelta{key}'] = f'{100 * c["delta"]:+.0f}'
+            scorer_macros[f'ScorerDeltaCI{key}'] = fmt_ci(c)
+            scorer_macros[f'ScorerLavl{key}'] = f'{100 * np.mean(lv):.0f}'
+            scorer_macros[f'ScorerCritic{key}'] = f'{100 * np.mean(cv):.0f}'
+            if is_ctrl:
+                n_worse_ctrl += int(c['significant'] and c['delta'] < 0)
+            else:
+                deltas_puz.append(100 * c['delta']); n_sig_puz += int(c['significant'] and c['delta'] > 0)
+            top = max(best, 100 * np.mean(lv), 100 * np.mean(cv))
+            srows.append(' & '.join([tex_env(env) + (' (control)' if is_ctrl else ''), fmt(best, bold=near_top(best, top)),
+                                     f'{kl}', fmt(100 * np.mean(lv), bold=near_top(100 * np.mean(lv), top)),
+                                     f'{kc}', fmt(100 * np.mean(cv), bold=near_top(100 * np.mean(cv), top)),
+                                     fmt_ci(c)]) + ' \\\\')
+        else:
+            srows.append(' & '.join([tex_env(env) + (' (control)' if is_ctrl else ''), fmt(best), f'{kl}', '--', f'{kc}', '--', '--']) + ' \\\\')
+    with open(os.path.join(tdir, 'scorer_ablation.tex'), 'w') as f:
+        f.write('\\begin{tabular}{lccccc r}\n\\toprule\n'
+                'Dataset & Best & $k$ & \\wmpp{} (metric value) & $k$ & \\wmpp{} (direct value) & direct $-$ metric \\\\\n\\midrule\n'
+                + '\n'.join(srows) + '\n\\bottomrule\n\\end{tabular}\n')
+    scorer_macros['ScorerNumSigPuzzle'] = str(n_sig_puz)
+    scorer_macros['ScorerNumPuzzle'] = str(len(deltas_puz))
+    scorer_macros['ScorerMeanDeltaPuzzle'] = f'{np.mean(deltas_puz):+.0f}' if deltas_puz else '--'
+    scorer_macros['ScorerNumWorseCtrl'] = str(n_worse_ctrl)
+    scorer_macros['ScorerNumCtrl'] = str(len(ctrl))
 
     # ---- bank policies table ---------------------------------------------------
     rows = []
@@ -292,18 +420,53 @@ def main(_):
                           union=o['union'] * 100 if o else np.nan,
                           obest=o['best_mean'] * 100 if o else np.nan, dW=dW,
                           wmpp=d['wmpp_seeds'].mean() * 100)
+        # Paired hierarchical bootstrap of WMPP - U on the same episodes (reviewer W7/Q6).
+        if o and 'union_by_ep' in o:
+            wep = per_episode_success(FLAGS.eval_root, env, d['m']['WMPP']['variant'], tags)
+            per_seed = {}
+            for sd, ue in o['union_by_ep'].items():
+                keys = sorted(set(ue) & set(wep.get(sd, {})))
+                if keys:
+                    per_seed[sd] = np.array([wep[sd][k] - ue[k] for k in keys])
+            if per_seed:
+                stats[env]['dU'] = hier_boot(per_seed, 10000, np.random.default_rng(0))
         s = stats[env]
         if abs(s['obest'] - s['bmax']) > 0.05:
             print(f'[assets] WARNING {env}: oracle best {s["obest"]:.1f} != table best {s["bmax"]:.1f} '
                   '(oracle tag and report baselines come from different runs)')
         head = s['union'] - s['obest']
+        u_half = None
+        if o and 'union_by_ep' in o:
+            u_half = half_width({sd: np.array(list(ue.values())) for sd, ue in o['union_by_ep'].items()})
+        # Bold rule (decided 2026-09-12): OGBench convention over the three success columns
+        # B_max, U (hindsight oracle), and WMPP -- every entry within 95% of their row maximum.
+        top = float(np.nanmax([s['bmax'], s['union'], s['wmpp']]))
+        b_cell = fmt_pm_ci(s['bmax'], d['b_half'], bold=near_top(s['bmax'], top)) if d.get('b_half') is not None else fmt(s['bmax'], bold=near_top(s['bmax'], top))
+        u_bold = (not np.isnan(s['union'])) and near_top(s['union'], top)
+        u_cell = fmt_pm_ci(s['union'], u_half, bold=u_bold) if u_half is not None else fmt(s['union'], bold=u_bold)
         rows.append(' & '.join([
-            tex_env(env), fmt(s['bmax']), fmt(s['gap']), str(n_half),
-            fmt(s['union']), fmt(head), fmt(s['wmpp']), fmt(dW, nd=1),
+            tex_env(env), b_cell, fmt(s['gap']),
+            u_cell, fmt(head),
+            fmt_pm_ci(s['wmpp'], d['w_half'], bold=near_top(s['wmpp'], top)), fmt_ci(d['dW']), 'PADJ_' + env,
         ]) + ' \\\\')
+    # Multiplicity: Holm (FWER) and Benjamini-Hochberg (FDR) over the per-dataset WMPP-vs-best and
+    # WMPP-vs-Random bootstrap p-values (reviewer W10).
+    def fmt_p(p):
+        return '--' if p is None else ('$<10^{-4}$' if p <= 1e-4 else f'{p:.3g}')
+    penv = [e for e in envs if R[e]['p_best'] is not None]
+    adj = {}
+    if penv:
+        pb = np.array([R[e]['p_best'] for e in penv]); pr = np.array([R[e]['p_rand'] for e in penv if R[e]['p_rand'] is not None])
+        hb, bb = holm(pb), bh(pb)
+        adj = {e: dict(holm=float(hb[i]), bh=float(bb[i])) for i, e in enumerate(penv)}
+        renv = [e for e in penv if R[e]['p_rand'] is not None]
+        hr, br = (holm(pr), bh(pr)) if len(pr) else (np.array([]), np.array([]))
+        for i, e in enumerate(renv):
+            adj[e].update(holm_rand=float(hr[i]), bh_rand=float(br[i]))
+    rows = [r.replace(' & PADJ_' + e, '') for r, e in zip(rows, envs)]  # p_Holm column dropped from the table (counts stay in the text)
     with open(os.path.join(tdir, 'bank_stats.tex'), 'w') as f:
-        f.write('\\begin{tabular}{lcccccrr}\n\\toprule\n'
-                'Dataset & $B_{\\max}$ & $D_{\\mathrm{gap}}$ & $N_{1/2}$ & $U$ (oracle) & $U-B_{\\max}$ & \\wmpp & $\\Delta$\\wmpp \\\\\n\\midrule\n'
+        f.write('\\begin{tabular}{lccccc r}\n\\toprule\n'
+                'Dataset & $B_{\\max}$ & $D_{\\mathrm{gap}}$ & $U$ (oracle) & $U-B_{\\max}$ & \\wmpp & $\\Delta$\\wmpp{} [95\\% CI] \\\\\n\\midrule\n'
                 + '\n'.join(rows) + '\n\\bottomrule\n\\end{tabular}\n')
 
     # ---- oracle panel (Fig. "when", panel b): every dataset, family order --------
@@ -326,6 +489,65 @@ def main(_):
         f.write('\\begin{tabular}{lrrr}\n\\toprule\nDataset & Best & $U$ & \\wmpp \\\\\n\\midrule\n'
                 + '\n'.join(prow) + '\n\\bottomrule\n\\end{tabular}\n')
 
+
+    # ---- per-dataset settings table (replaces the k=c sweep in the draft) ------
+    srows = []
+    for env in envs:
+        d = R[env]
+        wmcfg = {}
+        try:
+            with open(os.path.join(envcfg[env]['wm_dir'], 'flags.json')) as f:
+                wmcfg = json.load(f).get('wm', {})
+        except FileNotFoundError:
+            print('[assets] WARNING: no flags.json under wm_dir for', env)
+        rc = wm_val_rank_corr(envcfg[env]['wm_dir'], envcfg[env].get('wm_epoch'))
+        gamma = wmcfg.get('discount')
+        srows.append(' & '.join([
+            tex_env(env), str(len(d['fam'])), f'$({d["k"]},{d["k"]})$', str(d['c']),
+            str(wmcfg.get('horizon', '--')),
+            '--' if gamma is None else f'{gamma:.3f}'.rstrip('0').rstrip('.'),
+            '--' if 'lavl_expectile' not in wmcfg else f"{wmcfg['lavl_expectile']:.1f}",
+            f"{wmcfg.get('lavl_smoothness_weight', 0.0):g}",  # flag absent in older runs = model default 0
+            f"{envcfg[env].get('wm_epoch', 0) // 1000}k",
+            '--' if rc is None else f'{rc:.2f}',
+        ]) + ' \\\\')
+    # Compact per-family settings table (what the paper uses): k=c, Random c, WM settings.
+    frows = []
+    for famname, fenvs in FAMILIES:
+        fenvs = [e for e in fenvs if e in R]
+        if not fenvs:
+            continue
+        cfgs = []
+        for e in fenvs:
+            try:
+                cfgs.append(json.load(open(os.path.join(envcfg[e]['wm_dir'], 'flags.json'))).get('wm', {}))
+            except FileNotFoundError:
+                cfgs.append({})
+        def setstr(key, fmt):
+            vals = sorted({fmt(c[key]) for c in cfgs if key in c}, key=lambda x: float(x) if x.replace('.', '').isdigit() else 0, reverse=True)
+            return '/'.join(vals) if vals else '--'
+        ks = sorted({R[e]['k'] for e in fenvs}); cs = sorted({R[e]['c'] for e in fenvs})
+        # Random-Switch runs at the SAME interval as WMPP (one value per family);
+        # fail loudly if the selection rule ever separates them again.
+        assert ks == cs, f'{famname}: Random c {cs} != WMPP k=c {ks} (rule must keep them matched)'
+        scorers = {R[e]['scorer'] for e in fenvs}
+        assert len(scorers) == 1, f'{famname}: mixed scorers {scorers} (the value head is chosen per family)'
+        head = {'lavl': 'metric', 'critic': 'direct'}[scorers.pop()]
+        frows.append(' & '.join([
+            famname, str(len(fenvs)), head, '/'.join(str(k) for k in ks),
+            setstr('horizon', lambda v: str(v)), setstr('discount', lambda v: f'{v:.3f}'.rstrip('0').rstrip('.')),
+            setstr('lavl_expectile', lambda v: f'{v:.1f}'), setstr('lavl_smoothness_weight', lambda v: f'{v:g}'),
+        ]) + ' \\\\')
+    with open(os.path.join(tdir, 'settings_family.tex'), 'w') as f:
+        f.write('\\begin{tabular}{lclccccc}\n\\toprule\n'
+                'Family & datasets & value head & $k{=}c$ & WM $H$ & $\\gamma$ & $\\kappa$ & $\\lambda_{\\mathrm{smooth}}$ \\\\\n\\midrule\n'
+                + '\n'.join(frows) + '\n\\bottomrule\n\\end{tabular}\n')
+    with open(os.path.join(tdir, 'settings.tex'), 'w') as f:
+        f.write('\\begin{tabular}{lccccccccc}\n\\toprule\n'
+                'Dataset & $P$ & $(k,c)$ & Random $c$ & WM $H$ & $\\gamma$ & $\\kappa$ & $\\lambda_{\\mathrm{smooth}}$'
+                ' & WM ckpt & val.\\ rank corr. \\\\\n\\midrule\n'
+                + '\n'.join(srows) + '\n\\bottomrule\n\\end{tabular}\n')
+
     # ---- numbers for the running text -----------------------------------------
     n_up = sum(1 for e in envs if R[e]['dW']['significant'] and R[e]['dW']['delta'] > 0)
     n_down = sum(1 for e in envs if R[e]['dW']['significant'] and R[e]['dW']['delta'] < 0)
@@ -337,6 +559,10 @@ def main(_):
     # saturation datasets (0.8 vs 0.1, 99.9 vs 99.7) do not inflate the count.
     n_above_union = sum(1 for e in envs if stats[e]['wmpp'] >= stats[e]['union'] + 1.0)
     n_above_union_any = sum(1 for e in envs if stats[e]['wmpp'] > stats[e]['union'] + 1e-9)
+    # Pre-specified criterion: the paired 95% interval of WMPP - U excludes zero (positive / negative).
+    n_above_union_sig = sum(1 for e in envs if 'dU' in stats[e] and stats[e]['dU']['ci_lo'] > 0)
+    n_below_union_sig = sum(1 for e in envs if 'dU' in stats[e] and stats[e]['dU']['ci_hi'] < 0)
+    print(f'[assets] WMPP - U paired CI: {n_above_union_sig} datasets significantly above U, {n_below_union_sig} below')
     n_above_best_paired = sum(1 for e in envs if stats[e]['wmpp'] > stats[e]['obest'] + 1e-9)
     # Agreement between each checkpoint's own eval.csv and its paired re-evaluation (all bank members).
     base_diffs = [abs(R[e]['fam'][a] - R[e]['official_fam'][a]) * 100
@@ -349,16 +575,30 @@ def main(_):
     mean_dWR = np.mean([R[e]['dWR']['delta'] for e in envs]) * 100
     macros = {
         'NumEnvs': str(len(envs)), 'NumEnvsPending': str(len(missing)),
-        'MeanWMPP': f'{avg["wmpp"]:.1f}', 'MeanBest': f'{avg["best"]:.1f}', 'MeanRandom': f'{avg["rand"]:.1f}',
-        'MeanGain': f'{avg["wmpp"] - avg["best"]:.1f}', 'MeanWMPPminusRandom': f'{mean_dWR:.1f}',
+        'MeanWMPP': f'{avg["wmpp"]:.0f}', 'MeanBest': f'{avg["best"]:.0f}', 'MeanRandom': f'{avg["rand"]:.0f}',
+        'MeanGain': f'{avg["wmpp"] - avg["best"]:.0f}', 'MeanWMPPminusRandom': f'{mean_dWR:.0f}',
+        'NumEnvsHiql': str(macros_hiql_n),
         'NumSigUp': str(n_up), 'NumSigDown': str(n_down), 'NumNS': str(len(envs) - n_up - n_down),
         'NumWMPPvsRandomSig': str(n_wr), 'NumWMPPvsRandomNeg': str(n_wr_neg),
         'NumRandomSigUp': str(n_rand_up), 'NumRandomSigDown': str(n_rand_down),
-        'NumRandomBestCBeats': str(n_rand_beats), 'NumAboveUnion': str(n_above_union), 'NumAboveUnionAny': str(n_above_union_any), 'NumAboveBestPaired': str(n_above_best_paired),
-        'MaxAbsBaselineDiff': f'{max(base_diffs):.1f}', 'MeanAbsBaselineDiff': f'{np.mean(base_diffs):.1f}',
+        'NumRandomBestCBeats': str(n_rand_beats), 'NumAboveUnion': str(n_above_union), 'NumAboveUnionAny': str(n_above_union_any), 'NumAboveUnionSig': str(n_above_union_sig), 'NumBelowUnionSig': str(n_below_union_sig), 'NumAboveBestPaired': str(n_above_best_paired),
+        'MaxAbsBaselineDiff': f'{max(base_diffs):.0f}', 'MeanAbsBaselineDiff': f'{np.mean(base_diffs):.1f}',
         'NumBestFamilySame': str(len(envs) - len(best_changed)),
         'NumBetterMean': str(n_better_mean), 'NumEqualMean': str(n_equal_mean),
+        'NumSigUpHolm': str(sum(1 for e in adj if adj[e]['holm'] < 0.05 and R[e]['dW']['delta'] > 0)),
+        'NumSigDownHolm': str(sum(1 for e in adj if adj[e]['holm'] < 0.05 and R[e]['dW']['delta'] < 0)),
+        'NumSigUpBH': str(sum(1 for e in adj if adj[e]['bh'] < 0.05 and R[e]['dW']['delta'] > 0)),
+        'NumSigDownBH': str(sum(1 for e in adj if adj[e]['bh'] < 0.05 and R[e]['dW']['delta'] < 0)),
+        'NumWMPPvsRandomSigHolm': str(sum(1 for e in adj if adj[e].get('holm_rand', 1) < 0.05 and R[e]['dWR']['delta'] > 0)),
+        'NumWMPPvsRandomNegHolm': str(sum(1 for e in adj if adj[e].get('holm_rand', 1) < 0.05 and R[e]['dWR']['delta'] < 0)),
+        'NumWMPPvsRandomSigBH': str(sum(1 for e in adj if adj[e].get('bh_rand', 1) < 0.05 and R[e]['dWR']['delta'] > 0)),
+        'NumWMPPvsRandomNegBH': str(sum(1 for e in adj if adj[e].get('bh_rand', 1) < 0.05 and R[e]['dWR']['delta'] < 0)),
+        'SelectRule': next(iter({R[e]['select_rule'] for e in envs}), 'test').replace('_', '-'),
+        'NumCneqK': str(sum(1 for e in envs if R[e]['c'] != R[e]['k'])),
     }
+    macros.update(scorer_macros)
+    print(f"[assets] multiplicity: Holm up {macros['NumSigUpHolm']} / BH up {macros['NumSigUpBH']} (uncorrected {n_up}); "
+          f"vs Random Holm {macros['NumWMPPvsRandomSigHolm']}+/{macros['NumWMPPvsRandomNegHolm']}-; selection rule {macros['SelectRule']}")
     n_ep = sorted({R[e]['oracle']['n_episodes_per_seed'] for e in envs})
     n_fallback = sum(1 for e in envs if R[e]['oracle_tag'] != FLAGS.oracle_tag)
     macros['OracleEpsPerGoal'] = '/'.join(str(n // 5) for n in n_ep)
@@ -371,23 +611,32 @@ def main(_):
         for dgt, word in (('3', 'Three'), ('4', 'Four'), ('5', 'Five'), ('6', 'Six')):
             key = key.replace(dgt, word)  # LaTeX macro names cannot contain digits
         d = R[env]
-        macros[f'Gain{key}'] = f'{d["dW"]["delta"] * 100:+.1f}'
-        macros[f'Wmpp{key}'] = f'{d["wmpp_seeds"].mean() * 100:.1f}'
-        macros[f'Best{key}'] = f'{d["best_seeds"].mean() * 100:.1f}'
+        macros[f'Gain{key}'] = f'{d["dW"]["delta"] * 100:+.0f}'
+        macros[f'Wmpp{key}'] = f'{d["wmpp_seeds"].mean() * 100:.0f}'
+        macros[f'Best{key}'] = f'{d["best_seeds"].mean() * 100:.0f}'
         J = sorted(d['fam'].values(), reverse=True)
         j2 = J[1] if len(J) > 1 else 0.0
-        macros[f'Second{key}'] = f'{j2 * 100:.1f}'          # runner-up family
-        macros[f'Dgap{key}'] = f'{(J[0] - j2) * 100:.1f}'    # dominance gap
-        macros[f'Rand{key}'] = f'{d["rand_seeds"].mean() * 100:.1f}'
-        macros[f'GainRand{key}'] = f'{d["dR"]["delta"] * 100:+.1f}'
-        macros[f'WvsR{key}'] = f'{d["dWR"]["delta"] * 100:+.1f}'
+        macros[f'Second{key}'] = f'{j2 * 100:.0f}'          # runner-up family
+        macros[f'Dgap{key}'] = f'{(J[0] - j2) * 100:.0f}'    # dominance gap
+        macros[f'Rand{key}'] = f'{d["rand_seeds"].mean() * 100:.0f}'
+        macros[f'GainRand{key}'] = f'{d["dR"]["delta"] * 100:+.0f}'
+        macros[f'WvsR{key}'] = f'{d["dWR"]["delta"] * 100:+.0f}'
         macros[f'Kc{key}'] = str(d['k'])
-        macros[f'Union{key}'] = f'{stats[env]["union"]:.1f}'
-        macros[f'Obest{key}'] = f'{stats[env]["obest"]:.1f}'
-        macros[f'Headroom{key}'] = f'{stats[env]["union"] - stats[env]["obest"]:.1f}'
+        macros[f'RandC{key}'] = str(d['c'])
+        macros[f'Pval{key}'] = fmt_p(d['p_best'])
+        if env in adj:
+            macros[f'PadjHolm{key}'] = fmt_p(adj[env]['holm'])
+            macros[f'PadjBH{key}'] = fmt_p(adj[env]['bh'])
+        macros[f'Union{key}'] = f'{stats[env]["union"]:.0f}'
+        if 'dU' in stats[env]:
+            du = stats[env]['dU']
+            macros[f'UnionDelta{key}'] = f'{100 * du["delta"]:+.0f}'
+            macros[f'UnionCI{key}'] = f'[{100 * du["ci_lo"]:+.0f}, {100 * du["ci_hi"]:+.0f}]'
+        macros[f'Obest{key}'] = f'{stats[env]["obest"]:.0f}'
+        macros[f'Headroom{key}'] = f'{stats[env]["union"] - stats[env]["obest"]:.0f}'
         rc = {c: v for c, v in d['rand_c'].items() if v == v}
         cbest = max(rc, key=rc.get)
-        macros[f'RandBestC{key}'] = f'{rc[cbest] * 100:.1f}'
+        macros[f'RandBestC{key}'] = f'{rc[cbest] * 100:.0f}'
         macros[f'RandBestCArg{key}'] = str(cbest)
     with open(os.path.join(tdir, 'numbers.tex'), 'w') as f:
         f.write('% Auto-generated by scripts/make_paper_assets.py -- do not edit.\n')
@@ -443,8 +692,8 @@ def main(_):
             ax.annotate(short(e).replace('-navigate', ''), (stats[e]['union'] - stats[e]['obest'], stats[e]['dW']),
                         xytext=xy_off, textcoords='offset points', fontsize=6, color='#333')
     ax.axhline(0, color='#555', lw=0.6)
-    ax.set_xlabel('Static per-episode oracle headroom $U-B_{\\max}$ (points)')
-    ax.set_ylabel('WMPP gain over best policy (points)')
+    ax.set_xlabel('Hindsight per-episode oracle minus best fixed policy (points)')
+    ax.set_ylabel('WMPA gain over best fixed policy (points)')
     ax.grid(color='#e6e6e6', lw=0.6)
     ax.set_axisbelow(True)
     fig.tight_layout()
@@ -481,7 +730,7 @@ def main(_):
     fig.supxlabel('scoring horizon $k$ = commitment $c$', fontsize=8, y=0.01)
     fig.supylabel('success rate (%)', fontsize=8, x=0.005)
     fig.tight_layout(rect=(0.01, 0.03, 1, 1))
-    fig.savefig(os.path.join(fdir, 'kc_profiles.pdf'))
+    fig.savefig(os.path.join(FLAGS.extras_dir, 'kc_profiles.pdf'))
     plt.close(fig)
 
     print(json.dumps({k: v for k, v in macros.items() if not k[0:4] in ('Gain', 'Wmpp', 'Best', 'Rand', 'WvsR', 'KcAn', 'KcCu', 'KcHu', 'KcPu', 'KcSc')}, indent=1))

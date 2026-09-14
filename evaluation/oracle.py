@@ -41,9 +41,14 @@ def collect_and_branch_episode(
     """
     seed = episode_seed(env_name, f'task{task_id}', episode_idx)
     _seed_env(env, seed)
+    # The trajectory generator is either a bank member (by name) or any controller
+    # exposing act(ob, goal) — e.g. the WMPP arbiter or Random-Switch — so decision
+    # states can be harvested from the distribution the arbiter itself induces.
+    base_policy = bank[base_policy_name] if isinstance(base_policy_name, str) else base_policy_name
+    if hasattr(base_policy, 'reset_episode'):
+        base_policy.reset_episode()
     ob, info = env.reset(options=dict(task_id=task_id))
     goal = np.asarray(info['goal'])
-    base_policy = bank[base_policy_name]
     sim = SimBranch(env)
 
     # --- base episode with periodic snapshots ---

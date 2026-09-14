@@ -14,3 +14,6 @@ Hard rules:
   numbers in `WMPP_ICLR2027/main.tex`.
 - Environment: `source /scratch/jwquan/wmpp/venv/bin/activate`;
   `export OGBENCH_IMPLS=/project/6067317/jwquan/ogbench/impls MUJOCO_GL=disable JAX_PLATFORMS=cpu`.
+
+Useful tips:
+- When explaining the results, code, decisions, plans or any other questions, use the most understandable and simple language. Reply in Simplified Chinese.

@@ -1,0 +1,19 @@
+idx,env_name,algo,seed,flags
+1,humanoidmaze-giant-navigate-v0,hiql,0,--agent=agents/hiql.py --agent.discount=0.995 --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=100
+2,humanoidmaze-giant-navigate-v0,hiql,1,--agent=agents/hiql.py --agent.discount=0.995 --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=100
+3,humanoidmaze-giant-navigate-v0,hiql,2,--agent=agents/hiql.py --agent.discount=0.995 --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=100
+4,cube-triple-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+5,cube-triple-play-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+6,cube-triple-play-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+7,cube-triple-noisy-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+8,cube-triple-noisy-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+9,cube-triple-noisy-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+10,cube-quadruple-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+11,cube-quadruple-play-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+12,cube-quadruple-play-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+13,scene-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+14,scene-play-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+15,scene-play-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+16,puzzle-4x4-play-v0,hiql,0,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+17,puzzle-4x4-play-v0,hiql,1,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10
+18,puzzle-4x4-play-v0,hiql,2,--agent=agents/hiql.py --agent.high_alpha=3.0 --agent.low_alpha=3.0 --agent.subgoal_steps=10

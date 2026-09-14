@@ -25,6 +25,7 @@ Usage:
 import csv
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,6 +33,9 @@ sys.path.insert(0, ROOT)
 
 import numpy as np
 from absl import app, flags
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from paper_common import hier_boot, paired_rows  # noqa: E402
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('envs', 'all', 'Comma-separated env names, or "all".')
@@ -46,8 +50,24 @@ flags.DEFINE_string('abl_json', '/scratch/jwquan/wmpp/planner_eval/ablation_abl.
 flags.DEFINE_string('out', None, 'Output prefix (default: <eval_root>/og50_report).')
 flags.DEFINE_bool('onestep_as_cell', False, 'Treat (1,1) as one more k=c cell of the hyperparameter sweep '
                   '(selected like any other); drop the separate One-Step control and report Random only.')
+flags.DEFINE_string('family_scorer', '', 'Per-family rollout scorer, e.g. "puzzle:critic": families listed use the '
+                    'critic{k}_commit{k} variants (a bank member\'s own V, eval_planner --critic_scorer) as WMPP; '
+                    'all other families use the LAVL head (score{k}_commit{k}). The critic rows must be merged '
+                    'via --extra_tags (e.g. og50cr).')
 flags.DEFINE_string('extra_tags', '', 'Comma-separated extra dir tags whose variants are merged into the main '
                     'tag (e.g. og50r1 = Random at c=1).')
+flags.DEFINE_enum('select_rule', 'test', ['test', 'loo_family', 'global', 'validation', 'family'],
+                  'How the reported k=c cell is chosen: test = best mean on this dataset (paper); loo_family = the k with the best '
+                  'mean over the OTHER datasets of the same family (leave-one-dataset-out); global = the k with the best macro-average '
+                  'over all other datasets. The two leakage-free rules never look at the dataset being reported.')
+flags.DEFINE_string('family_k', 'cube:5,scene:5,maze:1,puzzle:50', 'family:k list for --select_rule=family (WMPP k=c per task family; '
+                    'values chosen on the validation episodes 50..99, never on the reported ones).')
+flags.DEFINE_string('family_c', 'cube:5,scene:5,maze:5,puzzle:1', 'family:c list for --select_rule=family (Random-Switch interval per family).')
+flags.DEFINE_string('val_tag', 'og50val', 'Dir tag of the validation sweep (episodes 50..99) used by --select_rule=validation: '
+                    'k* = best mean WMPP diagonal cell and c* = best mean Random interval, both chosen there and never on the '
+                    'reported episodes.')
+flags.DEFINE_string('selected_cells_out', os.path.join(ROOT, 'manifests', 'selected_cells.json'),
+                    'Where --select_rule=validation writes {env: {k, c, ...}} for downstream launchers.')
 flags.DEFINE_string('fixed_tag', '', 'Dir tag holding every fixed bank policy evaluated on the SAME episode seeds '
                     'as the planners (og50fx). When set, the best policy and all fixed baselines come from these '
                     'runs and every delta-vs-best is a paired per-episode contrast; when empty, the eval.csv '
@@ -89,20 +109,6 @@ def paired(by_method, a, b):
     return np.array([float(r['success']) - base[key(r)] for r in by_method[a]])
 
 
-def paired_rows(rows_a, rows_b):
-    """Per-episode success difference a-b for two row lists keyed by (task, episode).
-    Asserts that both lists cover the same episodes with the same reset seed."""
-    key = lambda r: (r['task_id'], r['episode_idx'])
-    base = {key(r): r for r in rows_b}
-    assert set(base) == {key(r) for r in rows_a}, 'episode sets differ'
-    out = []
-    for r in rows_a:
-        b = base[key(r)]
-        assert r['reset_seed'] == b['reset_seed'], f'reset seed mismatch at {key(r)}'
-        out.append(float(r['success']) - float(b['success']))
-    return np.array(out)
-
-
 def load_fixed(env_dir, seed, tag):
     """Fixed-policy rows of bank_sd<seed>_<tag>/ grouped by algorithm family, plus act-ms per policy."""
     d = os.path.join(env_dir, f'bank_sd{seed}_{tag}')
@@ -119,22 +125,6 @@ def load_fixed(env_dir, seed, tag):
     return by_fam, act_ms
 
 
-def hier_boot(per_seed, n_boot, rng, offset=0.0):
-    """Hierarchical bootstrap of the mean of {seed: array}; `offset` shifts
-    the point estimate and CI (used for delta-vs-reported-baseline)."""
-    seeds = list(per_seed)
-    point = float(np.mean([per_seed[s].mean() for s in seeds])) - offset
-    boot = np.empty(n_boot)
-    for b in range(n_boot):
-        picked = rng.choice(len(seeds), len(seeds), replace=True)
-        means = [per_seed[seeds[i]][rng.integers(0, len(per_seed[seeds[i]]), len(per_seed[seeds[i]]))].mean() for i in picked]
-        boot[b] = np.mean(means) - offset
-    lo, hi = float(np.percentile(boot, 2.5)), float(np.percentile(boot, 97.5))
-    return dict(delta=point, ci_lo=lo, ci_hi=hi,
-                per_seed={str(s): float(per_seed[s].mean() - offset) for s in seeds},
-                significant=bool(lo > 0 or hi < 0))
-
-
 def entropy_bits(fracs):
     p = np.array([v for v in fracs.values() if v > 0], dtype=float)
     if not len(p):
@@ -143,7 +133,75 @@ def entropy_bits(fracs):
     return float(-(p * np.log2(p)).sum())
 
 
-def report_env(env, seeds, tag, n_boot, envcfg, abl_fixed_ms):
+def env_family(env):
+    for fam, prefixes in (('maze', ('pointmaze', 'antmaze', 'humanoidmaze')), ('cube', ('cube',)), ('scene', ('scene',)), ('puzzle', ('puzzle',))):
+        if env.startswith(prefixes):
+            return fam
+    return 'other'
+
+
+def diag_success(env, seeds, tag):
+    """{k: 3-seed mean success of score<k>_commit<k>} for one dataset (main + extra tags)."""
+    env_dir = os.path.join(FLAGS.eval_root, env)
+    extra = [t for t in FLAGS.extra_tags.split(',') if t]
+    data = {s: load_seed(env_dir, s, tag, extra) for s in seeds}
+    spec = data[seeds[0]][0]['variants']
+    kmin = 1 if FLAGS.onestep_as_cell else 2
+    out = {}
+    for v, d in spec.items():
+        if d['imagine'] == d['commit'] >= kmin and not v.startswith('mpc'):
+            out[d['imagine']] = float(np.mean([data[s][0]['success'][v] for s in seeds]))
+    return out
+
+
+TEST_RANGE = [0, 50]
+VAL_RANGE = [50, 100]
+
+
+def load_validation(env_dir, seed, tag):
+    """Mean success per variant of one validation run (summary only; never merged with test rows)."""
+    d = os.path.join(env_dir, f'bank_sd{seed}_{tag}')
+    with open(os.path.join(d, 'summary.json')) as f:
+        summary = json.load(f)
+    assert summary.get('episode_range') == VAL_RANGE, (d, summary.get('episode_range'))
+    return {v: float(x) for v, x in summary['success'].items()}
+
+
+def validation_selection(envs, seeds, tag):
+    """(k*, c*) per env from the validation sweep: argmax of the 3-seed mean over the diagonal
+    WMPP cells and, independently, over the Random intervals (ties -> smallest k / c)."""
+    out = {}
+    for e in envs:
+        env_dir = os.path.join(FLAGS.eval_root, e)
+        per = [load_validation(env_dir, s, tag) for s in seeds]
+        common = set.intersection(*[set(p) for p in per])
+        diag = {int(v.split('score')[1].split('_')[0]): float(np.mean([p[v] for p in per]))
+                for v in common if v.startswith('score') and v == f"score{v.split('score')[1].split('_')[0]}_commit{v.split('score')[1].split('_')[0]}"}
+        rand = {int(v.replace('random_commit', '')): float(np.mean([p[v] for p in per]))
+                for v in common if v.startswith('random_commit')}
+        assert diag and rand, (e, sorted(common))
+        k = max(diag, key=lambda x: (diag[x], -x))
+        c = max(rand, key=lambda x: (rand[x], -x))
+        out[e] = dict(k=k, c=c, val_wmpp=diag, val_random=rand, rule='validation')
+    return out
+
+
+def leakage_free_k(envs, seeds, tag, rule):
+    """k per dataset chosen WITHOUT that dataset's own sweep (loo_family | global)."""
+    ds = {e: diag_success(e, seeds, tag) for e in envs}
+    chosen = {}
+    for e in envs:
+        others = [o for o in envs if o != e and (rule == 'global' or env_family(o) == env_family(e))]
+        if not others:
+            others = [o for o in envs if o != e]
+        ks = sorted(set.intersection(*[set(ds[o]) for o in others]) & set(ds[e]))
+        score = {k: float(np.mean([ds[o][k] for o in others])) for k in ks}
+        chosen[e] = max(ks, key=lambda k: (score[k], -k))
+    return chosen
+
+
+def report_env(env, seeds, tag, n_boot, envcfg, abl_fixed_ms, force_k=None, force_c=None, val_info=None,
+               scorer='lavl'):
     env_dir = os.path.join(FLAGS.eval_root, env)
     rng = np.random.default_rng(0)
     extra = [t for t in FLAGS.extra_tags.split(',') if t]
@@ -151,14 +209,22 @@ def report_env(env, seeds, tag, n_boot, envcfg, abl_fixed_ms):
     spec = data[seeds[0]][0]['variants']
     for s in seeds:
         assert set(data[s][0]['variants']) == set(spec), (env, s)
+        er = data[s][0].get('episode_range')
+        assert er is None or list(er) == TEST_RANGE, (env, s, er, 'reported runs must be the test episodes')
 
     kmin = 1 if FLAGS.onestep_as_cell else 2
     diag = sorted((v for v, d in spec.items() if d['imagine'] == d['commit'] >= kmin and not v.startswith('mpc')),
                   key=lambda v: spec[v]['imagine'])
     diag_succ = {v: float(np.mean([data[s][0]['success'][v] for s in seeds])) for v in diag}
     sel = max(diag, key=lambda v: (diag_succ[v], -spec[v]['imagine']))
+    if force_k is not None:
+        prefix = 'critic' if scorer == 'critic' else 'score'
+        sel = f'{prefix}{force_k}_commit{force_k}'
+        assert sel in spec, (env, sel, f'scorer={scorer}: merge its tag via --extra_tags')
     k = spec[sel]['imagine']
     roles = {'WMPP': sel, 'Random': f'random_commit{k}'}
+    if force_c is not None:
+        roles['Random'] = f'random_commit{force_c}'
     if not FLAGS.onestep_as_cell:
         roles['OneStep'] = 'score1_commit1'
     assert roles['Random'] in spec, (env, roles)
@@ -246,7 +312,8 @@ def report_env(env, seeds, tag, n_boot, envcfg, abl_fixed_ms):
 
     return dict(
         env_name=env, bank_seeds=seeds, protocol='5 tasks x 50 episodes per bank seed (official OGBench)',
-        selected_k=k, selected_variant=sel,
+        selected_k=k, selected_variant=sel, select_rule=FLAGS.select_rule,
+        selected_c=spec[roles['Random']]['commit'], validation=val_info,
         diagonal={v: diag_succ[v] for v in diag},
         onestep_success=float(np.mean([data[s][0]['success']['score1_commit1'] for s in seeds])),
         random_by_commit={v: float(np.mean([data[s][0]['success'][v] for s in seeds]))
@@ -313,13 +380,15 @@ def markdown(reports):
                      f"{100 * r['best_policy_test_success']:.1f} | {100 * m['MPC']['success']:.1f} | {100 * m['WMPP']['success']:.1f} | "
                      f"{fmt_ci(c['MPC_vs_best_policy'])} | {fmt_ci(c['WMPP_vs_MPC'])} |")
     L.append('\n### Diagonal sweep (mean success %, cell re-selected under the official protocol)\n')
-    ks = sorted({spec_k for r in reports for spec_k in (int(v.split('_')[0][5:]) for v in r['diagonal'])})
+    # variants are {prefix}{k}_commit{k} with prefix 'score' (metric value) or 'critic' (direct value)
+    ks = sorted({int(re.search(r'(\d+)_commit', v).group(1)) for r in reports for v in r['diagonal']})
     L.append('| env | ' + ' | '.join(f'({k},{k})' for k in ks) + ' | selected |')
     L.append('|---|' + '---|' * (len(ks) + 1))
     for r in reports:
+        pref = 'critic' if (r.get('validation') or {}).get('scorer') == 'critic' else 'score'
         cells = []
         for k in ks:
-            v = r['diagonal'].get(f'score{k}_commit{k}')
+            v = r['diagonal'].get(f'{pref}{k}_commit{k}')
             cells.append('—' if v is None else f'{100 * v:.1f}')
         L.append(f"| {r['env_name']} | " + ' | '.join(cells) + f" | ({r['selected_k']},{r['selected_k']}) |")
     L.append('\n### Random control at every commitment interval (mean success %)\n')
@@ -369,10 +438,36 @@ def main(_):
                       if all(os.path.exists(os.path.join(FLAGS.eval_root, d, f'bank_sd{s}_{FLAGS.dir_tag}', 'summary.json')) for s in seeds))
     else:
         envs = FLAGS.envs.split(',')
+    forced, forced_c, val = {}, {}, {}
+    if FLAGS.select_rule == 'validation':
+        val = validation_selection(envs, seeds, FLAGS.val_tag)
+        forced = {e: v['k'] for e, v in val.items()}
+        forced_c = {e: v['c'] for e, v in val.items()}
+        print(f'[report] validation selection (k*, c*): {{e: (v["k"], v["c"]) for e, v in val.items()}}')
+        with open(FLAGS.selected_cells_out, 'w') as f:
+            json.dump(val, f, indent=1)
+        print(f'[report] wrote {FLAGS.selected_cells_out}')
+    elif FLAGS.select_rule == 'family':
+        fk = {a: int(b) for a, b in (x.split(':') for x in FLAGS.family_k.split(','))}
+        fc = {a: int(b) for a, b in (x.split(':') for x in FLAGS.family_c.split(','))}
+        fs = {a: b for a, b in (x.split(':') for x in FLAGS.family_scorer.split(',') if x)}
+        val = {e: dict(k=fk[env_family(e)], c=fc[env_family(e)], rule='family', family=env_family(e),
+                       scorer=fs.get(env_family(e), 'lavl')) for e in envs}
+        forced = {e: v['k'] for e, v in val.items()}
+        forced_c = {e: v['c'] for e, v in val.items()}
+        print(f'[report] family rule k={fk} c={fc} scorer={fs or "lavl everywhere"}')
+        with open(FLAGS.selected_cells_out, 'w') as f:
+            json.dump(val, f, indent=1)
+        print(f'[report] wrote {FLAGS.selected_cells_out}')
+    elif FLAGS.select_rule != 'test':
+        forced = leakage_free_k(envs, seeds, FLAGS.dir_tag, FLAGS.select_rule)
+        print(f'[report] {FLAGS.select_rule} selection: {forced}')
     reports = []
     for env in envs:
         print(f'[report] {env}', flush=True)
-        reports.append(report_env(env, seeds, FLAGS.dir_tag, FLAGS.n_boot, envcfg, abl_fixed_ms))
+        reports.append(report_env(env, seeds, FLAGS.dir_tag, FLAGS.n_boot, envcfg, abl_fixed_ms,
+                                  force_k=forced.get(env), force_c=forced_c.get(env), val_info=val.get(env),
+                                  scorer=(val.get(env) or {}).get('scorer', 'lavl')))
     out = FLAGS.out or os.path.join(FLAGS.eval_root, 'og50_report')
     with open(out + '.json', 'w') as f:
         json.dump(reports, f, indent=2)

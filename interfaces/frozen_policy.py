@@ -64,6 +64,43 @@ class FrozenPolicy:
         )
         return np.asarray(actions)
 
+    def value(self, observations, goals):
+        """This agent's OWN goal-conditioned state value V(s, g) on raw observations.
+
+        Exists for value-based learners (GCIQL, GCIVL, HIQL define a 'value'
+        module); GCBC has no critic and CRL/QRL parameterize Q/d differently.
+        Used as an alternative rollout scorer (eval_planner --critic_scorer):
+        one member's critic applied identically to every candidate's imagined
+        states, so scores are comparable across the bank. Returns (N,).
+        """
+        try:
+            v = self._agent.network.select('value')(
+                np.asarray(observations, dtype=np.float32), np.asarray(goals, dtype=np.float32))
+        except (KeyError, AttributeError, TypeError) as e:
+            raise ValueError(f'{self.agent_name} exposes no goal-conditioned value network') from e
+        v = np.asarray(v)
+        # Ensembled heads (if any) -> conservative min, matching IQL's target.
+        return v.min(axis=0) if v.ndim == 2 else v
+
+    def q_min(self, observations, goals, actions):
+        """This agent's OWN goal-conditioned action value min_j Q_j(s, a, g) on raw observations.
+
+        GCIQL trains two Q heads (an ensemblized GCValue over [s; g; a]); the
+        minimum over heads is the agent's own conservative critic, the same
+        reduction it uses for its value and actor targets. Used by the
+        model-free selector (eval_planner --critic_select_commit), which scores
+        every bank member's proposed action at the current state without any
+        imagined rollout. Returns (N,).
+        """
+        try:
+            q = self._agent.network.select('critic')(
+                np.asarray(observations, dtype=np.float32), np.asarray(goals, dtype=np.float32),
+                np.asarray(actions, dtype=np.float32))
+        except (KeyError, AttributeError, TypeError) as e:
+            raise ValueError(f'{self.agent_name} exposes no goal-conditioned action-value network') from e
+        q = np.asarray(q)
+        return q.min(axis=0) if q.ndim == 2 else q
+
 
 def _example_dims(env_name):
     """Observation/action dims from the env registration, without datasets."""

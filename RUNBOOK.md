@@ -300,6 +300,43 @@ Numbers: `og50_final_sweep.md`. Main table with ±std over seeds:
   then §3.4–3.5. `make_paper_assets.py` already lists pointmaze under the Maze family.
 - Candidates after this one (user intent): other pointmaze/antmaze sizes and stitch datasets.
 
+### 5.2c New: pointmaze-large-navigate-v0 + antmaze-medium-navigate-v0 (user request 2026-09-08, "more envs")
+Same recipe as §5.2b, fully chained in SLURM (nothing to babysit):
+- Banks: arrays **58699729** (`scripts/pointmaze_large_manifest.csv`, 6 h) and **58699730**
+  (`scripts/antmaze_medium_manifest.csv`, 12 h), 18 rows each, OGBench `hyperparameters.sh`
+  defaults (pointmaze-large: gciql α=0.003 / qrl α=0.0003 / crl α=0.03; antmaze-medium:
+  gciql α=0.3 / qrl α=0.003 / crl α=0.1; gcivl α=10, hiql 3/3 for both), RUN_GROUP=mpilot, 3g MIG.
+  Walltime anchors: pointmaze-medium rows 1.0–1.75 h on 3g; antmaze-large rows 1.2–2.3 h on a full H100.
+- WMs: **58699731** (pointmaze-large) and **58699732** (antmaze-medium), `wmpp-wmv-lavl-<env>`,
+  H=10, LAVL γ=0.999 / κ=0.9 / smoothness 10, 1M steps, batch 1024, 12 h 3g (anchors: pointmaze-medium
+  5 h 20 on 3g, antmaze-large 8 h 13 on 2g).
+- Cascades: **58699735** / **58699736** = `launchers/cascade_newmaze.sh <env> <wm_jobid>` with
+  `--dependency=afterok:<bank array>:<wm job>`; each runs `scripts/onboard_env.py --val --submit`
+  (env-config entry from eval.csv, `launch_og50_<env>.sh`, then og50 + og50fx + **og50val** × 3 seeds,
+  4 h / 2 h / 4 h). `--val` is new (held-out episodes 50–99, needed by `derive_family_cells.py`).
+  If a bank row fails, SLURM cancels the cascade: fix the row, then run the cascade line by hand.
+  STATUS 2026-09-09: **pointmaze-large DONE end to end** (all 4 GPU jobs ran on 2g.20gb after a
+  3g→2g `scontrol` move; bank rows 1–2.4 h, WM 7 h 58; cascade 58699735 → evals 58859746–54, all
+  COMPLETED; report: `report_og50.py --envs=pointmaze-large-navigate-v0 --onestep_as_cell --fixed_tag=og50fx`
+  → paired og50fx: qrl 78.8 / hiql 54.8 / gcivl 48.4 / crl 39.2 / gcbc 34.1 / gciql 34.0; WMPP diagonal
+  (1,1) **78.4**, (5,5) 68.0, (10,10) 56.9, (25,25) 53.6, (50,50) 54.7, (100,100) 57.2 — held-out og50val
+  also picks k=c=1 (83.9); Random c=1 61.7 but c=10/25/50/100 = 90.5/95.3/98.3/96.0 — the
+  pointmaze-medium pattern again: WMPA ≈ best policy, long-commit random cycling nearly solves the maze).
+  antmaze-medium: WM 58699732 done (8 h 19); bank rows 4 and 6 died in <20 s on fc10713 (CUDA-init
+  preflight) → resubmitted as array **58924850** (fc10713 excluded); row 18 still pending; cascade
+  re-created as **58924852** (`afterok:58699730_18:58924850`, replaces cancelled 58699736).
+  **antmaze-medium DONE 2026-09-09** (evals 58965554–63): paired og50fx hiql 94.4 / crl 94.0 / qrl 77.3 /
+  gciql 71.5 / gcivl 71.1 / gcbc 32.9; WMPP (1,1) **95.9**, (5,5) 95.9, (10,10) 93.9, (25,25) 85.5,
+  (50,50) 79.3, (100,100) 83.6 (og50val also picks k=c=1); Random c=1 95.2, c=5 94.0, c=10 92.4,
+  c=25 90.8, c=50 91.3, c=100 89.1. Saturated bank: WMPA ≈ best policy ≈ Random c=1.
+  Both envs have config entries + og50/og50fx/og50val dirs; they are NOT in FAMILIES / the paper.
+- **USER DECISION 2026-09-09: do NOT add these two envs to the paper** (no FAMILIES edits, no
+  derive/final_regen). Report the numbers only; the user decides later whether they go in. If they do:
+  add both to `FAMILIES['Maze']` in `scripts/paper_common.py`, `scripts/make_paper_assets.py` and
+  `scripts/derive_family_cells.py`, re-derive the maze interval, then `final_regen.sh`.
+  Appendix controls (og50sim4 true-sim, og50mpcf MPC, og50abl4s stall) are NOT chained — copy the
+  antmaze lines from `launchers/launch_antmaze_wm1m.sh` if those tables must have 22 rows.
+
 ### 5.3 Superseded / on disk only
 - 20-episode protocol runs: tags `lavlp`, `lavlp_h1` (100,1), `abl`, `lavlv*`,
   `hsweep`, `2x2*`, `value*`, `vhsweep`; aggregates `aggregate_*.json`;
@@ -361,6 +398,58 @@ margins, hence the 1-point rule in the paper). `U − best` explains the null ro
      cube-double-play, scene-noisy, puzzle-4x4-noisy, cube-single-play + one floor env;
    - qualitative timelines (policy chain, score traces) for 3 wins + 3 failures —
      data already exists in `episodes.csv:policy_chain` and could be plotted without new runs.
+     - 2026-09-09: prototype "one real state, six branches" figure done without new runs:
+       `scripts/plot_branch_case.py` (imagines the seed-0 bank from every `oracle_wmpp/<env>`
+       decision state, cache `planner_eval/branch_case/<env>.npz`; `--list` prints candidate
+       states, `--state N` plots). Shipped `figures/branch_case_cube_double.{pdf,png}` =
+       cube-double-play state 62 (task 3, ep 2, t=150; k=5 WMPP run executed GCIQL there;
+       WM at k=10 and k=5 both pick GCIQL; GCIQL/HIQL succeed in the true sim, GCIVL = best
+       fixed policy fails). Not yet wired into `main.tex` / `make_paper_assets.py`.
+     - 2026-09-09: decision point cloud (mentor's suggestion: every arbitration as a point in
+       state space coloured by the chosen policy). New `--dump_decisions` flag in
+       `scripts/eval_planner.py` (planners built with `log_decisions=True`; per-decision
+       `t, obs, goal, scores, policy_idx` + episode key written to `decisions_<variant>.npz`
+       next to `episodes.csv`; behaviour verified identical to og50 on 10 smoke episodes).
+       Jobs `wmpp-og50dec-cube-double-play-sd{0,1,2}` = 59009733-35 (tag `og50dec`,
+       WMPP k=c=10 + random_commit10, 250 eps/seed, launcher
+       `launchers/launch_og50dec_cube-double-play.sh`). Analysis + figure:
+       `scripts/plot_decision_cloud.py` (gate: choice predictability from task-phase features
+       vs Random at chance; figure `figures/decision_cloud_cube_double.{pdf,png}` only if the
+       gate passes). Pilot on 142 oracle states: 1-NN accuracy of the pick ~ chance, mild
+       phase dependence (holding -> GCIVL/HIQL), so expect a weak cloud; the phase histogram
+       is the robust fallback. pytest lives in `/scratch/jwquan/wmpp/pylib` (venv has no pip):
+       `PYTHONPATH=/scratch/jwquan/wmpp/pylib python -m pytest -p no:cacheprovider tests/...`.
+       RESULT (jobs COMPLETED 2026-09-09, 8-9 min each; og50dec episodes identical to og50 on all
+       3 seeds): 19,485 WMPP / 33,978 Random decisions. Gate: choice predictability from task
+       features kNN 0.276 vs chance 0.220 (raw state 0.310; confident half 0.32/0.36 vs 0.23);
+       I(choice; phase) = 0.016 bits, permutation p < 0.001; Random at chance (0.174 vs 0.169,
+       p = 0.10). Structure is real but weak: the raw scatter (panels a/b) is visually
+       indistinguishable from Random; the per-phase histogram (panel c) shows GCIQL rising in
+       carry phases (0.26/0.31 vs 0.16-0.18), CRL 0.20 in reach-2 vs 0.08 in carry-2.
+       Recommendation: do NOT use the scatter in the paper; panel (c) or the numbers in text.
+       Report `planner_eval/decision_cloud_cube-double-play-v0.json`; figures
+       `figures/decision_cloud_cube_double{,_ratio}.{pdf,png}` (not wired into main.tex).
+     - 2026-09-13: episode flow figures (one real WMPP episode, cube-double-play task 5 ep 31,
+       bank seed 0: 133 steps, success, 14 arbitrations, chain HIQL/GCIQL/GCIVL; all six fixed
+       policies fail this episode; seed 0 has 120 such all-fail episodes and WMPP solves 67).
+       `scripts/plot_episode_flow.py` (timeline + imagined-value panels at t=20/80/120, offline
+       re-imagination asserted equal to the logged scores) -> `figures/episode_flow_cube_double`.
+       `scripts/render_episode_frames.py` replays the episode deterministically (chain checked
+       against og50dec) and renders MuJoCo frames at every arbitration step; needs EGL, so it runs
+       as a GPU job (`wmpp-render-cube-double-play-t5e31` = 59669331, 2g.20gb, JAX on CPU);
+       frames -> `planner_eval/episode_frames/<env>/task5_ep31/`. `scripts/plot_episode_frames.py`
+       composes the frame strip with the selected policy under each frame.
+       DONE: job 59669331 COMPLETED in 43 s (EGL works on GPU nodes; the TypeError at exit is
+       the mujoco EGL context destructor, harmless). Frames t=0..130 step 10 + t=133 + goal.png.
+       Figures: `figures/episode_frames_cube_double.{pdf,png}` (frames t=0/20/70/120/133, WM pick
+       under each) and `figures/episode_flow_cube_double.{pdf,png}` (timeline + imagined values).
+       Cube index 0 = red, 1 = blue (cube_env.py); this episode places blue first, then red on top.
+       2026-09-13 (user request): `figures/episode_frames_cube_double.pdf` is now Figure 2 in
+       main.tex (`fig:episode`, §5.3, referenced from the first observation); the old Figure 2
+       (`regimes.pdf`, `fig:when`) moved to App. `app:bank-stats` above `tab:bank-stats`
+       (still referenced from §5.3 text). Final figure style: pastel HIQL #E1D5E7 / GCIQL #FFE6CC /
+       GCIVL #D5E8D4, Times (Nimbus Roman), no t labels/time axis. Overleaf: upload the PDF to
+       figures/ and paste the two tex blocks. `episode_flow_cube_double` stays on disk, unused.
 3. ~~Initial git commit~~ DONE 2026-08-27: `37e350e` on `main`, pushed to
    `github.com/junwei0102/wm-policy-portfolio`. Tag a release when the paper is frozen.
 4. Anonymous code release checklist (strip absolute paths from defaults in

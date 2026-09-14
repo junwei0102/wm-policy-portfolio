@@ -1,0 +1,142 @@
+{
+ "antmaze-large-navigate-v0": {
+  "k": 1,
+  "c": 1,
+  "rule": "family",
+  "family": "maze",
+  "scorer": "lavl"
+ },
+ "cube-double-noisy-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-double-play-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-quadruple-noisy-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-quadruple-play-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-single-noisy-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-single-play-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-triple-noisy-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "cube-triple-play-v0": {
+  "k": 5,
+  "c": 5,
+  "rule": "family",
+  "family": "cube",
+  "scorer": "lavl"
+ },
+ "pointmaze-medium-navigate-v0": {
+  "k": 1,
+  "c": 1,
+  "rule": "family",
+  "family": "maze",
+  "scorer": "lavl"
+ },
+ "puzzle-3x3-noisy-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-3x3-play-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-4x4-noisy-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-4x4-play-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-4x5-noisy-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-4x5-play-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-4x6-noisy-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "puzzle-4x6-play-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "puzzle",
+  "scorer": "critic"
+ },
+ "scene-noisy-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "scene",
+  "scorer": "lavl"
+ },
+ "scene-play-v0": {
+  "k": 10,
+  "c": 10,
+  "rule": "family",
+  "family": "scene",
+  "scorer": "lavl"
+ }
+}

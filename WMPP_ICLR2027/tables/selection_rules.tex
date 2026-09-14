@@ -1,0 +1,27 @@
+\begin{tabular}{lc|cc|cc|cc}
+\toprule
+ & & \multicolumn{2}{c|}{per-dataset (test)} & \multicolumn{2}{c|}{leave-one-out family} & \multicolumn{2}{c}{single global $k$} \\
+Dataset & Best & $k$ & \wmpp & $k$ & \wmpp & $k$ & \wmpp \\
+\midrule
+\texttt{pointmaze-medium-navigate} & 76 & 1 & \textbf{79} & 5 & 73 & 25 & 63 \\
+\texttt{antmaze-large-navigate} & 90 & 5 & \textbf{93} & 1 & 89 & 50 & 73$^{\downarrow}$ \\
+\texttt{cube-single-play} & 71 & 1 & \textbf{46} & 5 & 37$^{\downarrow}$ & 25 & 31$^{\downarrow}$ \\
+\texttt{cube-single-noisy} & 99 & 5 & \textbf{100}$^{*}$ & 5 & 100$^{*}$ & 25 & 99 \\
+\texttt{cube-double-play} & 36 & 10 & \textbf{73}$^{*}$ & 5 & 69$^{*}$ & 50 & 65$^{*}$ \\
+\texttt{cube-double-noisy} & 26 & 5 & \textbf{60}$^{*}$ & 50 & 40$^{*}$ & 50 & 40$^{*}$ \\
+\texttt{cube-triple-play} & 5 & 100 & \textbf{4} & 5 & 1$^{\downarrow}$ & 25 & 2 \\
+\texttt{cube-triple-noisy} & 9 & 50 & \textbf{19}$^{*}$ & 5 & 16$^{*}$ & 25 & 18$^{*}$ \\
+\texttt{cube-quadruple-play} & 0 & 1 & \textbf{0} & 5 & 0 & 25 & 0 \\
+\texttt{cube-quadruple-noisy} & 0 & 25 & \textbf{1} & 5 & 0 & 25 & 1 \\
+\texttt{scene-play} & 52 & 1 & \textbf{91}$^{*}$ & 5 & 87$^{*}$ & 50 & 65$^{*}$ \\
+\texttt{scene-noisy} & 30 & 5 & \textbf{71}$^{*}$ & 1 & 56$^{*}$ & 50 & 56$^{*}$ \\
+\texttt{puzzle-3x3-play} & 91 & 50 & \textbf{20}$^{*}$ & 100 & 19$^{*}$ & 25 & 18$^{*}$ \\
+\texttt{puzzle-3x3-noisy} & 91 & 100 & \textbf{94} & 50 & 91 & 5 & 24$^{\downarrow}$ \\
+\texttt{puzzle-4x4-play} & 24 & 100 & \textbf{27} & 50 & 23 & 25 & 21 \\
+\texttt{puzzle-4x4-noisy} & 34 & 25 & \textbf{54}$^{*}$ & 100 & 49$^{*}$ & 50 & 51$^{*}$ \\
+\texttt{puzzle-4x5-play} & 14 & 50 & \textbf{13} & 100 & 11 & 25 & 12 \\
+\texttt{puzzle-4x5-noisy} & 20 & 50 & \textbf{20} & 100 & 20 & 25 & 20 \\
+\texttt{puzzle-4x6-play} & 11 & 100 & \textbf{14} & 100 & 14 & 25 & 11 \\
+\texttt{puzzle-4x6-noisy} & 19 & 100 & \textbf{18} & 100 & 18 & 25 & 16$^{\downarrow}$ \\
+\bottomrule
+\end{tabular}

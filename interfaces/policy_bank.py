@@ -14,8 +14,8 @@ import os
 from interfaces.frozen_policy import FrozenPolicy
 
 
-def find_run_dirs(env_name, policy_root, epoch, algos=None, seeds=None):
-    """Map '<algo>-sd<seed>' -> run_dir for completed runs of env_name."""
+def find_run_dirs(env_name, policy_root, epoch, algos=None, seeds=None, suffix=None):
+    """Map '<algo>-sd<seed>' (or '<algo>-<suffix>-sd<seed>') -> run_dir for completed runs of env_name."""
     run_dirs = {}
     for flags_path in sorted(glob.glob(os.path.join(policy_root, '*', 'flags.json'))):
         try:
@@ -36,13 +36,14 @@ def find_run_dirs(env_name, policy_root, epoch, algos=None, seeds=None):
         run_dir = os.path.dirname(flags_path)
         if not os.path.exists(os.path.join(run_dir, f'params_{epoch}.pkl')):
             continue
-        run_dirs[f'{algo}-sd{seed}'] = run_dir
+        run_dirs[f'{algo}-{suffix}-sd{seed}' if suffix else f'{algo}-sd{seed}'] = run_dir
     return run_dirs
 
 
-def load_bank(env_name, policy_root, epoch, algos=None, seeds=None):
-    """Load all matching frozen policies. Returns {name: FrozenPolicy}."""
-    run_dirs = find_run_dirs(env_name, policy_root, epoch, algos=algos, seeds=seeds)
+def load_bank(env_name, policy_root, epoch, algos=None, seeds=None, suffix=None):
+    """Load all matching frozen policies. Returns {name: FrozenPolicy}; `suffix` tags the names
+    (e.g. policies trained on another dataset pooled into a bank: '<algo>-noisy-sd0')."""
+    run_dirs = find_run_dirs(env_name, policy_root, epoch, algos=algos, seeds=seeds, suffix=suffix)
     return {name: FrozenPolicy.load(run_dir, epoch) for name, run_dir in sorted(run_dirs.items())}
 
 

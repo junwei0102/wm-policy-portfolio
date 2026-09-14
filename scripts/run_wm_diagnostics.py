@@ -67,7 +67,11 @@ def main(_):
     #   value: the learned LAVL value head under three horizon aggregations.
     # (`scores` — the former success-head family — is kept as zeros so the
     # downstream summary keys stay stable.)
-    progress_fn = get_progress_fn(FLAGS.env_name)
+    try:
+        progress_fn = get_progress_fn(FLAGS.env_name)
+    except NotImplementedError:
+        progress_fn = None  # no privileged progress diagnostic for this env (e.g. pointmaze)
+        print('[diag] no progress fn for this env; progress_* blocks will be null')
     has_value = True
     has_succ = False  # success head removed (2026-08-27); its branches below are inert
     counter = TransitionCounter()
@@ -84,10 +88,11 @@ def main(_):
         for p, name in enumerate(policies):
             roll = imagine_policy_rollout(wm, bank[name], obs0, goal, H_max, counter)
             traj = roll['obs_traj'][1:]  # (H_max, E, d)
-            prog = np.stack(
-                [progress_fn(traj[:, e], np.tile(goal, (H_max, 1))) for e in range(traj.shape[1])]
-            ).mean(axis=0)  # (H_max,)
-            prog_scores[s, p] = np.maximum.accumulate(prog)[h_idx]
+            if progress_fn is not None:
+                prog = np.stack(
+                    [progress_fn(traj[:, e], np.tile(goal, (H_max, 1))) for e in range(traj.shape[1])]
+                ).mean(axis=0)  # (H_max,)
+                prog_scores[s, p] = np.maximum.accumulate(prog)[h_idx]
             if has_value:
                 traj_e = np.moveaxis(traj, 1, 0)  # (E, H_max, d)
                 goals_e = np.broadcast_to(goal, traj_e.shape[:-1] + goal.shape[-1:])
@@ -108,8 +113,9 @@ def main(_):
         if has_succ:
             per_horizon_ranking[h] = pairwise_ranking_accuracy(scores[:, :, hi], outcomes)
             per_horizon_top1[h] = top1_winner_rate(scores[:, :, hi], outcomes)
-        prog_ranking[h] = pairwise_ranking_accuracy(prog_scores[:, :, hi], outcomes)
-        prog_top1[h] = top1_winner_rate(prog_scores[:, :, hi], outcomes)
+        if progress_fn is not None:
+            prog_ranking[h] = pairwise_ranking_accuracy(prog_scores[:, :, hi], outcomes)
+            prog_top1[h] = top1_winner_rate(prog_scores[:, :, hi], outcomes)
         if has_value:
             for agg in value_scores:
                 value_ranking[agg][h] = pairwise_ranking_accuracy(value_scores[agg][:, :, hi], outcomes)
@@ -162,8 +168,8 @@ def main(_):
         H_train=H_train,
         ranking={str(h): per_horizon_ranking[h] for h in horizons} if has_succ else None,
         top1={str(h): per_horizon_top1[h] for h in horizons} if has_succ else None,
-        progress_ranking={str(h): prog_ranking[h] for h in horizons},
-        progress_top1={str(h): prog_top1[h] for h in horizons},
+        progress_ranking={str(h): prog_ranking[h] for h in horizons} if progress_fn is not None else None,
+        progress_top1={str(h): prog_top1[h] for h in horizons} if progress_fn is not None else None,
         value_ranking={str(h): value_ranking['max'][h] for h in horizons} if has_value else None,
         value_top1={str(h): value_top1['max'][h] for h in horizons} if has_value else None,
         value_ranking_mean={str(h): value_ranking['mean'][h] for h in horizons} if has_value else None,
@@ -189,9 +195,9 @@ def main(_):
         'value_ranking_last', 'value_top1_last',
     )
     print(json.dumps({k: v for k, v in result.items() if k not in skip}, indent=2, default=float))
-    families = ([('success', per_horizon_ranking, per_horizon_top1)] if has_succ else []) + [
-        ('progress', prog_ranking, prog_top1)
-    ] + (
+    families = ([('success', per_horizon_ranking, per_horizon_top1)] if has_succ else []) + (
+        [('progress', prog_ranking, prog_top1)] if progress_fn is not None else []
+    ) + (
         [(f'value-{agg}', value_ranking[agg], value_top1[agg]) for agg in ('max', 'mean', 'last')]
         if has_value
         else []

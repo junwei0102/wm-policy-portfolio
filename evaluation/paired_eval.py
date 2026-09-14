@@ -85,7 +85,29 @@ def run_episode(env, policy, task_id, seed, temperature=0.0):
     # planning overhead); plain policies don't.
     if hasattr(policy, 'episode_info'):
         result.update(policy.episode_info())
+    # Optional per-decision arrays (planners built with log_decisions=True);
+    # popped again by evaluate_paired so they never reach episodes.csv.
+    if hasattr(policy, 'pop_decisions'):
+        dec = policy.pop_decisions()
+        if dec is not None:
+            result['_decisions'] = dec
     return result
+
+
+def write_rows(rows, out_csv):
+    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+    # Planner rows carry extra fields (chain, overhead); take the union.
+    fieldnames = []
+    for r in rows:
+        for k in r:
+            if k not in fieldnames:
+                fieldnames.append(k)
+    tmp = out_csv + '.tmp'
+    with open(tmp, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, restval='')
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(tmp, out_csv)
 
 
 def evaluate_paired(
@@ -96,14 +118,32 @@ def evaluate_paired(
     episodes_per_task,
     out_csv=None,
     temperature=0.0,
+    episode_range=None,
+    flush_every=None,
+    collect_decisions=False,
 ):
-    """Evaluate {name: FrozenPolicy} on paired episodes; returns list of rows."""
+    """Evaluate {name: FrozenPolicy} on paired episodes; returns list of rows.
+
+    episode_range=(start, end) evaluates only episode indices start..end-1. Seeds are a
+    hash of (env, task, index), so index 57 has the same reset seed in every run; the
+    official test set is 0..49 and a validation split uses fresh indices (e.g. 50..99).
+    flush_every=n rewrites out_csv every n episodes so a killed job keeps its rows.
+    collect_decisions=True additionally returns {method: [per-episode decision dicts]}
+    (planners built with log_decisions=True; each dict is stamped with the episode key).
+    """
     rows = []
+    decisions = {}
+    ep_iter = range(int(episode_range[0]), int(episode_range[1])) if episode_range else range(episodes_per_task)
     for name, policy in policies.items():
         for task_id in task_ids:
-            for ep in range(episodes_per_task):
+            for ep in ep_iter:
                 seed = episode_seed(env_name, f'task{task_id}', ep)
                 result = run_episode(env, policy, task_id, seed, temperature)
+                dec = result.pop('_decisions', None)
+                if dec is not None and collect_decisions:
+                    dec.update(task_id=task_id, episode_idx=ep, reset_seed=seed,
+                               ep_success=result['success'], ep_steps=result['steps'])
+                    decisions.setdefault(name, []).append(dec)
                 rows.append(
                     dict(
                         env_name=env_name,
@@ -114,18 +154,12 @@ def evaluate_paired(
                         **result,
                     )
                 )
+                if out_csv and flush_every and len(rows) % int(flush_every) == 0:
+                    write_rows(rows, out_csv)
     if out_csv:
-        os.makedirs(os.path.dirname(out_csv), exist_ok=True)
-        # Planner rows carry extra fields (chain, overhead); take the union.
-        fieldnames = []
-        for r in rows:
-            for k in r:
-                if k not in fieldnames:
-                    fieldnames.append(k)
-        with open(out_csv, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, restval='')
-            writer.writeheader()
-            writer.writerows(rows)
+        write_rows(rows, out_csv)
+    if collect_decisions:
+        return rows, decisions
     return rows
 
 

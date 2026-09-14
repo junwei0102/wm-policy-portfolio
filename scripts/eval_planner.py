@@ -23,7 +23,8 @@ from absl import app, flags
 from evaluation.oracle import headroom
 from evaluation.paired_eval import evaluate_paired
 from interfaces.policy_bank import load_bank, select_best_fixed
-from planners.portfolio import LeastUsedArbiter, NoisyPolicyArbiter, PolicyMPC, PortfolioMPC, RandomArbiter, RolloutRanker
+from planners.portfolio import CriticSelectArbiter, LeastUsedArbiter, NoisyPolicyArbiter, PolicyMPC, PortfolioMPC, RandomArbiter, RolloutRanker, StallRestartArbiter
+from planners.sim_rollout import SimOracleArbiter, SimRolloutRanker
 from world_model.model import EnsembleWorldModel
 from world_model.rollout import TransitionCounter
 from world_model.success_predicates import get_progress_fn
@@ -70,6 +71,16 @@ flags.DEFINE_bool(
     'headroom are skipped.',
 )
 flags.DEFINE_integer('random_seed', 0, 'Seed of the random-arbitration draw stream.')
+flags.DEFINE_string(
+    'critic_scorer',
+    None,
+    "Ablation of the LAVL head: score imagined states with this bank member's own "
+    "goal-conditioned value network (e.g. 'gciql-sd0'; a bare family name such as "
+    "'gciql' resolves to that family's member for the single --seeds). Adds variants "
+    'critic{k}_commit{k} for every k in --critic_kc.',
+)
+flags.DEFINE_string('critic_kc', None, 'k=c cells for the --critic_scorer variants, e.g. "5,100".')
+flags.DEFINE_string('critic_select_commit', None, 'Re-selection intervals c for the model-free Q-select control qsel_commit{c}: i*=argmax_i min_j Q_j(s, pi_i(s,g), g) of the --critic_scorer member, no rollout.')
 # Sampling-MPC baseline on the best fixed policy (world-model search WITHOUT
 # a portfolio): N Gaussian perturbations of the policy action, imagined k
 # steps, value-head scored, replanned every c steps. Off when --mpc_n=0.
@@ -91,6 +102,36 @@ flags.DEFINE_string('mpc_kc', None, 'Comma-separated diagonal MPC cells k=c (in 
 flags.DEFINE_string('explore_every', None, 'Comma-separated exploration intervals m (env steps).')
 flags.DEFINE_string('least_used_commit', None, 'Comma-separated commit intervals for the LeastUsed (round-robin) control.')
 flags.DEFINE_string('least_used_order', 'name', 'Comma-separated cycle orders for LeastUsed: name, reverse, shuffle (variant suffix _<order> unless name).')
+# Distilled students (distill/students.py run dirs) evaluated on the same
+# paired episodes as everything else: name=run_dir:epoch[:decode], comma list.
+# A student may also serve as the MPC prior (--mpc_policy=<name>), with
+# --mpc_candidates=samples drawing the MPC candidates from the student's own
+# action distribution (variant smpc<N>_score<k>_commit<c>).
+flags.DEFINE_string('extra_policy', None, 'Comma-separated name=run_dir:epoch[:decode] student policies.')
+flags.DEFINE_string('classifier', None, 'Comma-separated name=run_dir:epoch:commit learned-arbiter classifiers (distill.arbiter.ClassifierArbiter over the bank).')
+flags.DEFINE_enum('mpc_candidates', 'gauss', ['gauss', 'samples'],
+                  'PolicyMPC candidate source: Gaussian perturbations of the prior mean, or the prior policy\'s own samples.')
+# Review-driven ablations / controls (all on the same paired episodes).
+flags.DEFINE_enum('ens_agg', 'mean', ['mean', 'min', 'lcb'], 'Ensemble reduction of the value scores in every WM planner (paper: mean).')
+flags.DEFINE_string('abl_agg', None, 'Comma-separated horizon aggregations (last,mean) to ADD as variants <v>_agg<x> of every requested WMPP variant.')
+flags.DEFINE_string('abl_ens', None, 'Comma-separated ensemble reductions (min,lcb) to ADD as variants <v>_ens<x> of every requested WMPP variant.')
+flags.DEFINE_bool('abl_only', False, 'With --abl_agg/--abl_ens: do not run the plain requested variants themselves (they exist elsewhere).')
+flags.DEFINE_string('stall_window', None, 'Comma-separated windows m of the no-model stall-restart controller (variant stall_w<m>).')
+flags.DEFINE_float('stall_eps', 0.05, 'Stall threshold: normalised displacement over the window below which the policy is restarted.')
+flags.DEFINE_string('sim_kc', None, 'Comma-separated diagonal cells k=c to run with TRUE-simulator branches instead of the WM (variant sim_score<k>_commit<k>).')
+flags.DEFINE_string('bank_algos', None, 'Comma-separated algorithm families to keep in the bank (default: all).')
+flags.DEFINE_string('bank_exclude', None, 'Comma-separated bank policy names to drop (e.g. the best policy).')
+flags.DEFINE_string('bank_duplicate', None, 'Bank policy name to add a second time (as <name>-dup).')
+flags.DEFINE_string('out_label', None, 'Override the bank_sd<seeds> part of the output dir (bank-composition runs).')
+flags.DEFINE_string('episode_range', None, 'START:END — evaluate only these episode indices (seeds unchanged); '
+                    'the official test set is 0:50, a validation split uses fresh indices such as 50:100.')
+flags.DEFINE_integer('flush_every', 0, 'Rewrite episodes.csv every N episodes (0 = only at the end).')
+flags.DEFINE_bool('dump_decisions', False, 'Record (t, obs, goal, scores, winner) at every arbitration of the plain '
+                  'WMPP cells and RandomArbiter controls; written as decisions_<variant>.npz next to episodes.csv.')
+flags.DEFINE_string('bank_extra', None, 'Comma list of <env_name>:<policy_root>[:<suffix>] — policies trained on another '
+                    'dataset of the same env pooled into the bank as <algo>-<suffix>-sd<seed> (cross-dataset bank).')
+flags.DEFINE_string('sim_oracle_commit', None, 'Comma list of c: dynamic simulator oracle sim_oracle_commit<c> '
+                    '(every bank policy branched in the real simulator to episode end; privileged upper bound).')
 flags.DEFINE_integer('episodes_per_task', 20, 'Paired episodes per task.')
 flags.DEFINE_string('oracle_dir', '/scratch/jwquan/wmpp/oracle', 'Oracle root (headroom reference).')
 flags.DEFINE_string('out_dir', '/scratch/jwquan/wmpp/planner_eval', 'Output root.')
@@ -145,12 +186,37 @@ def bootstrap_delta(rows_a, rows_b, n_boot=10000, seed=0):
 
 def main(_):
     seeds = [int(s) for s in FLAGS.seeds.split(',')]
-    bank = load_bank(FLAGS.env_name, FLAGS.policy_root, FLAGS.policy_epoch, seeds=seeds)
-    assert FLAGS.best_fixed in bank, (FLAGS.best_fixed, sorted(bank))
+    algos = FLAGS.bank_algos.split(',') if FLAGS.bank_algos else None
+    bank = load_bank(FLAGS.env_name, FLAGS.policy_root, FLAGS.policy_epoch, algos=algos, seeds=seeds)
+    if FLAGS.bank_extra:
+        for item in FLAGS.bank_extra.split(','):
+            parts = item.split(':')
+            other_env, other_root = parts[0], parts[1]
+            suffix = parts[2] if len(parts) > 2 else other_env.split('-')[-2]  # e.g. 'noisy'
+            extra_bank = load_bank(other_env, other_root, FLAGS.policy_epoch, algos=algos, seeds=seeds, suffix=suffix)
+            assert extra_bank, f'no policies for {other_env} under {other_root}'
+            assert not set(extra_bank) & set(bank), sorted(set(extra_bank) & set(bank))
+            bank.update(extra_bank)
+            print(f'bank_extra: +{len(extra_bank)} policies from {other_env} ({suffix})')
+    if FLAGS.bank_exclude:
+        for n in FLAGS.bank_exclude.split(','):
+            assert n in bank, (n, sorted(bank))
+            del bank[n]
+    if FLAGS.bank_duplicate:
+        assert FLAGS.bank_duplicate in bank, (FLAGS.bank_duplicate, sorted(bank))
+        bank[f'{FLAGS.bank_duplicate}-dup'] = bank[FLAGS.bank_duplicate]
+    print(f'bank ({len(bank)}): {sorted(bank)}')
+    assert FLAGS.best_fixed in bank or FLAGS.skip_fixed, (FLAGS.best_fixed, sorted(bank))
     wm = EnsembleWorldModel.load(FLAGS.wm_dir, FLAGS.wm_epoch)
     horizon = FLAGS.horizon or int(wm.config['horizon'])
 
-    progress_fn = get_progress_fn(FLAGS.env_name)
+    # The privileged progress scorer only exists for a few envs and is only
+    # used by --score_mode=progress; value-mode runs must not require it.
+    try:
+        progress_fn = get_progress_fn(FLAGS.env_name)
+    except NotImplementedError:
+        assert FLAGS.score_mode != 'progress', f'no progress fn for {FLAGS.env_name}'
+        progress_fn = None
     # 2x2 ablation cells: (scoring horizon k) x (commitment c). Budget per env
     # step is P*E*k/c — deliberately NOT equalized across cells (the ablation
     # isolates which knob carries the gain); recorded per variant below.
@@ -171,6 +237,18 @@ def main(_):
         requested = FLAGS.variants.split(',') if FLAGS.variants else list(variant_specs)
     counters = {}
     methods = dict(bank)
+    extra = {}
+    if FLAGS.extra_policy:
+        from distill.students import load_student  # optional, local-only module
+        for item in FLAGS.extra_policy.split(','):
+            name, spec = item.split('=', 1)
+            parts = spec.split(':')
+            run_dir, epoch = parts[0], (int(parts[1]) if parts[1].isdigit() else parts[1])  # e.g. 'best'
+            decode = parts[2] if len(parts) > 2 else None
+            assert name not in bank, f'extra policy name {name} collides with a bank policy'
+            extra[name] = dict(run_dir=run_dir, epoch=epoch, decode=decode)
+            methods[name] = load_student(run_dir, epoch, decode=decode)
+            extra[name]['student'] = dict(methods[name].config)
     explore = [int(x) for x in FLAGS.explore_every.split(',')] if FLAGS.explore_every else [None]
     plain = list(requested)
     requested = []
@@ -178,6 +256,9 @@ def main(_):
         k, c = variant_specs[base]
         for m in explore:
             name = base if m is None else f'{base}_explore{m}'
+            if FLAGS.abl_only:
+                variant_specs[name] = (k, c)
+                continue
             variant_specs[name] = (k, c)
             counters[name] = TransitionCounter()
             methods[name] = RolloutRanker(
@@ -190,9 +271,90 @@ def main(_):
                 score_mode=FLAGS.score_mode,
                 score_agg=FLAGS.score_agg,
                 explore_every=m,
+                ens_agg=FLAGS.ens_agg,
+                log_decisions=FLAGS.dump_decisions,
             )
             requested.append(name)
+        # Scoring ablations of the same cell: horizon aggregation / ensemble reduction.
+        for agg in (FLAGS.abl_agg.split(',') if FLAGS.abl_agg else []):
+            name = f'{base}_agg{agg}'
+            variant_specs[name] = (k, c)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=c, progress_fn=progress_fn,
+                                          score_mode=FLAGS.score_mode, score_agg=agg, ens_agg=FLAGS.ens_agg)
+            requested.append(name)
+        for ens in (FLAGS.abl_ens.split(',') if FLAGS.abl_ens else []):
+            name = f'{base}_ens{ens}'
+            variant_specs[name] = (k, c)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=c, progress_fn=progress_fn,
+                                          score_mode=FLAGS.score_mode, score_agg=FLAGS.score_agg, ens_agg=ens)
+            requested.append(name)
 
+    critic_name, critic_fn = None, None
+    if FLAGS.critic_scorer:
+        critic_name = FLAGS.critic_scorer
+        if critic_name not in bank:
+            seeds_l = [int(x) for x in FLAGS.seeds.split(',')]
+            assert len(seeds_l) == 1, '--critic_scorer family name needs a single --seeds'
+            critic_name = f'{critic_name}-sd{seeds_l[0]}'
+        assert critic_name in bank, (critic_name, sorted(bank))
+        critic_fn = bank[critic_name].value
+        for k in (int(x) for x in FLAGS.critic_kc.split(',')) if FLAGS.critic_kc else []:
+            name = f'critic{k}_commit{k}'
+            assert name not in methods, name
+            variant_specs[name] = (k, k)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=k, progress_fn=progress_fn,
+                                          score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg,
+                                          critic_fn=critic_fn)
+            requested.append(name)
+            # the same scoring ablations as for the metric value (horizon aggregation / ensemble reduction)
+            for agg in (FLAGS.abl_agg.split(',') if FLAGS.abl_agg else []):
+                nm = f'{name}_agg{agg}'; variant_specs[nm] = (k, k); counters[nm] = TransitionCounter()
+                methods[nm] = RolloutRanker(wm, bank, counters[nm], horizon=k, replan_every=k, progress_fn=progress_fn,
+                                            score_mode='critic', score_agg=agg, ens_agg=FLAGS.ens_agg, critic_fn=critic_fn)
+                requested.append(nm)
+            for ens in (FLAGS.abl_ens.split(',') if FLAGS.abl_ens else []):
+                nm = f'{name}_ens{ens}'; variant_specs[nm] = (k, k); counters[nm] = TransitionCounter()
+                methods[nm] = RolloutRanker(wm, bank, counters[nm], horizon=k, replan_every=k, progress_fn=progress_fn,
+                                            score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=ens, critic_fn=critic_fn)
+                requested.append(nm)
+            if FLAGS.abl_only:  # keep only the ablation variants (the plain cell already exists in the sweep)
+                requested.remove(name); methods.pop(name); counters.pop(name)
+        # model-free control: the same member's twin-Q critic ranks each candidate's proposed action at the current state
+        for c in (int(x) for x in FLAGS.critic_select_commit.split(',')) if FLAGS.critic_select_commit else []:
+            name = f'qsel_commit{c}'
+            assert name not in methods, name
+            variant_specs[name] = (0, c)  # k=0: no imagined transitions (budget assertion expects exactly zero)
+            counters[name] = TransitionCounter()
+            methods[name] = CriticSelectArbiter(bank, bank[critic_name].q_min, c, seed=FLAGS.random_seed)
+            requested.append(name)
+
+    if FLAGS.classifier:
+        from distill.arbiter import ClassifierArbiter  # optional, local-only module
+        from distill.students import load_student
+        for item in FLAGS.classifier.split(','):
+            name, spec = item.split('=', 1)
+            run_dir, epoch_s, commit_s = spec.split(':')
+            epoch = int(epoch_s) if epoch_s.isdigit() else epoch_s
+            c = int(commit_s)
+            assert name not in bank and name not in methods, name
+            clf = load_student(run_dir, epoch)
+            methods[name] = ClassifierArbiter(clf, bank, commit=c, seed=FLAGS.random_seed)
+            extra[name] = dict(run_dir=run_dir, epoch=epoch, commit=c, student=dict(clf.config))
+            variant_specs[name] = (0, c)
+            counters[name] = TransitionCounter()
+            requested.append(name)
+    if FLAGS.stall_window:
+        # No-model restart heuristic: switch when the normalised state stalls.
+        for m in (int(x) for x in FLAGS.stall_window.split(',')):
+            name = f'stall_w{m}'
+            variant_specs[name] = (0, 1)
+            counters[name] = TransitionCounter()
+            methods[name] = StallRestartArbiter(bank, wm.normalizer['obs_mean'], wm.normalizer['obs_std'], m,
+                                                eps=FLAGS.stall_eps, seed=FLAGS.random_seed)
+            requested.append(name)
     if FLAGS.random_commit:
         # Control: same commitment interval, uniform policy draw, zero model
         # calls. Recorded as a variant with imagine=0 so the budget table
@@ -201,7 +363,7 @@ def main(_):
             name = f'random_commit{rc}'
             variant_specs[name] = (0, rc)
             counters[name] = TransitionCounter()
-            methods[name] = RandomArbiter(bank, rc, seed=FLAGS.random_seed)
+            methods[name] = RandomArbiter(bank, rc, seed=FLAGS.random_seed, log_decisions=FLAGS.dump_decisions)
             requested.append(name)
     if FLAGS.least_used_commit:
         for lc in (int(x) for x in FLAGS.least_used_commit.split(',')):
@@ -213,6 +375,9 @@ def main(_):
                 requested.append(name)
     # Nominal branch count per variant (P for bank planners, N for MPC).
     branches = {name: len(bank) for name in requested}
+    if FLAGS.classifier:
+        extra_names = [x.split('=', 1)[0] for x in FLAGS.classifier.split(',')]
+        branches.update({n: len(bank) for n in extra_names})
     mpc_cells = [(k, c) for k in (int(x) for x in FLAGS.mpc_k.split(',') if x)
                  for c in (int(x) for x in FLAGS.mpc_commit.split(',') if x)]
     if FLAGS.mpc_kc:
@@ -229,15 +394,21 @@ def main(_):
             branches[name] = FLAGS.pmpc_n_per * len(bank)
     if FLAGS.mpc_n:
         mpc_policy = FLAGS.mpc_policy or FLAGS.best_fixed
-        assert mpc_policy in bank, (mpc_policy, sorted(bank))
+        assert mpc_policy in bank or mpc_policy in extra, (mpc_policy, sorted(bank), sorted(extra))
+        prior = bank[mpc_policy] if mpc_policy in bank else methods[mpc_policy]
         for k, c in mpc_cells:
-            name = f'mpc{FLAGS.mpc_n}_s{FLAGS.mpc_sigma:g}_score{k}_commit{c}'
+            pref = 'critic' if critic_fn is not None else 'score'  # which value scores the candidates
+            if FLAGS.mpc_candidates == 'samples':
+                name = f'smpc{FLAGS.mpc_n}_{pref}{k}_commit{c}'
+            else:
+                name = f'mpc{FLAGS.mpc_n}_s{FLAGS.mpc_sigma:g}_{pref}{k}_commit{c}'
             variant_specs[name] = (k, c)
             counters[name] = TransitionCounter()
             methods[name] = PolicyMPC(
-                wm, bank[mpc_policy], mpc_policy, counters[name],
+                wm, prior, mpc_policy, counters[name],
                 n_samples=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, horizon=k,
                 replan_every=c, score_agg=FLAGS.score_agg, seed=FLAGS.random_seed,
+                candidates=FLAGS.mpc_candidates, critic_fn=critic_fn,
             )
             requested.append(name)
             branches[name] = FLAGS.mpc_n
@@ -256,8 +427,33 @@ def main(_):
             del methods[pol]
 
     env = gymnasium.make(env_id_of(FLAGS.env_name))
+    sim_names = []
+    if FLAGS.sim_kc:
+        # True-simulator branches (oracle dynamics) with the same value head / aggregation.
+        for k in (int(x) for x in FLAGS.sim_kc.split(',')):
+            name = f"sim_{'critic' if critic_fn is not None else 'score'}{k}_commit{k}"
+            variant_specs[name] = (k, k)
+            counters[name] = TransitionCounter()
+            methods[name] = SimRolloutRanker(env, wm, bank, counters[name], horizon=k, replan_every=k,
+                                             score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg, critic_fn=critic_fn)
+            requested.append(name)
+            branches[name] = len(bank)
+            sim_names.append(name)
+    if FLAGS.sim_oracle_commit:
+        # Privileged dynamic oracle: real-simulator branches to episode end at every boundary.
+        for c in (int(x) for x in FLAGS.sim_oracle_commit.split(',')):
+            name = f'sim_oracle_commit{c}'
+            variant_specs[name] = (0, c)
+            counters[name] = TransitionCounter()
+            methods[name] = SimOracleArbiter(env, bank, counters[name], commit=c,
+                                             episode_len=int(env.spec.max_episode_steps), fallback=FLAGS.best_fixed)
+            requested.append(name)
+            branches[name] = len(bank)
+            sim_names.append(name)
+    episode_range = tuple(int(x) for x in FLAGS.episode_range.split(':')) if FLAGS.episode_range else None
+    episode_len = int(env.spec.max_episode_steps)
     tag = f'_{FLAGS.out_tag}' if FLAGS.out_tag else ''
-    out_dir = os.path.join(FLAGS.out_dir, FLAGS.env_name, f'bank_sd{FLAGS.seeds}{tag}')
+    out_dir = os.path.join(FLAGS.out_dir, FLAGS.env_name, f'bank_sd{FLAGS.seeds}{tag}' if not FLAGS.out_label else f'{FLAGS.out_label}{tag}')
     os.makedirs(out_dir, exist_ok=True)
     rows = evaluate_paired(
         env,
@@ -266,7 +462,22 @@ def main(_):
         task_ids=[1, 2, 3, 4, 5],
         episodes_per_task=FLAGS.episodes_per_task,
         out_csv=os.path.join(out_dir, 'episodes.csv'),
+        episode_range=episode_range,
+        flush_every=FLAGS.flush_every or None,
+        collect_decisions=FLAGS.dump_decisions,
     )
+    if FLAGS.dump_decisions:
+        rows, decisions = rows
+        bank_names = sorted(bank)
+        for name, eps in decisions.items():
+            n = np.array([len(d['t']) for d in eps])
+            packed = {k: np.concatenate([d[k] for d in eps]) for k in ('t', 'obs', 'goal', 'scores', 'winner', 'explore')}
+            for k in ('task_id', 'episode_idx', 'reset_seed', 'ep_success', 'ep_steps'):
+                packed[k] = np.repeat(np.array([d[k] for d in eps]), n)
+            packed['policy_idx'] = packed.pop('winner')
+            packed['policies'] = np.array(bank_names)
+            np.savez_compressed(os.path.join(out_dir, f'decisions_{name}.npz'), **packed)
+            print(f'decisions_{name}.npz: {int(n.sum())} decisions over {len(eps)} episodes')
     env.close()
 
     by_method = {}
@@ -280,6 +491,9 @@ def main(_):
         env_steps = sum(r['steps'] for r in by_method[name])
         per_step[name] = counters[name].total / env_steps
         expected[name] = E * branches[name] * k / c
+        if name in sim_names:
+            expected[name] = branches[name] * k / c  # simulator steps, no ensemble factor
+            continue
         if c == 1 or k == 0:
             # Replanning every step (or never imagining) makes the budget exact.
             assert abs(per_step[name] - expected[name]) < 1e-9, (name, per_step[name])
@@ -296,11 +510,17 @@ def main(_):
         env_name=FLAGS.env_name,
         bank=sorted(bank),
         bank_seeds=FLAGS.seeds,
+        episode_range=list(episode_range) if episode_range else [0, FLAGS.episodes_per_task],
+        episode_len=episode_len,
+        bank_extra=FLAGS.bank_extra,
         best_fixed=FLAGS.best_fixed,
         horizon=horizon,
         commit=commit,
         score_mode=FLAGS.score_mode,
         score_agg=FLAGS.score_agg,
+        ens_agg=FLAGS.ens_agg,
+        stall_eps=FLAGS.stall_eps if FLAGS.stall_window else None,
+        bank_composition=dict(algos=FLAGS.bank_algos, exclude=FLAGS.bank_exclude, duplicate=FLAGS.bank_duplicate, size=len(bank)),
         variants={n: dict(imagine=variant_specs[n][0], commit=variant_specs[n][1]) for n in requested},
         success=dict(
             sorted(
@@ -338,8 +558,10 @@ def main(_):
             for name in requested
         },
         random_seed=FLAGS.random_seed if (FLAGS.random_commit or FLAGS.mpc_n) else None,
-        mpc=(dict(n=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, policy=FLAGS.mpc_policy or FLAGS.best_fixed)
+        mpc=(dict(n=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, policy=FLAGS.mpc_policy or FLAGS.best_fixed,
+                  candidates=FLAGS.mpc_candidates)
              if FLAGS.mpc_n else None),
+        extra_policies=extra,
         # Compute overhead: mean wall-clock per action, per method. Fixed
         # policies are the baseline; the planner surplus is the WM overhead.
         act_ms_per_step={
@@ -370,6 +592,8 @@ def main(_):
         else:
             print(f'Skipping oracle headroom: {branches_path} does not cover this bank.')
 
+    summary['critic_scorer'] = critic_name  # bank member whose V(s, g) scored critic* variants (None = LAVL head)
+    summary['critic_select'] = {'critic': critic_name, 'commits': [int(x) for x in FLAGS.critic_select_commit.split(',')]} if FLAGS.critic_select_commit else None
     with open(os.path.join(out_dir, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2, default=float)
     print(json.dumps(summary, indent=2, default=float))

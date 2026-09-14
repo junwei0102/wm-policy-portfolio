@@ -23,3 +23,17 @@ WMPP_ICLR2027/main.pdf
 
 # Per-user Claude Code settings
 .claude/settings.local.json
+
+# Distillation / DAgger line: local-only, not part of the release
+distill/
+scripts/train_distill.py
+scripts/make_distill_labels.py
+scripts/make_dagger_labels.py
+scripts/report_distill.py
+scripts/diag_distill_gap.py
+scripts/wandb_backfill_distill.py
+tests/test_distill.py
+tests/run_round2.py
+tests/test_round2.py
+world_model/rollout_batch.py
+ogbench.pdf
