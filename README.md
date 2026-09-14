@@ -59,7 +59,8 @@ with the corresponding flags (`--policy_root`, `--wm_dir`, `--out_dir`,
 1. **Policy bank** (GPU): `scripts/slurm_train_array.sbatch` over a
    `scripts/*_manifest.csv` (one row per env × algorithm × seed; OGBench defaults).
 2. **World model + metric value head** (GPU): `scripts/slurm_train_wm.sbatch` →
-   `scripts/train_world_model.py` (per-family hyperparameters in `RUNBOOK.md` §3.2).
+   `scripts/train_world_model.py` (per-family hyperparameters are its flags
+   `--horizon`, `--discount`, `--lavl_expectile`, `--lavl_smoothness_weight`).
 3. **Planner evaluation, og50 protocol** (CPU): `scripts/eval_planner.py` — official
    OGBench 5 tasks × 50 episodes per bank seed, identical per-episode reset seeds for
    every method, `k=c ∈ {1,5,10,25,50,100}` plus Random at every `c`; fixed-policy
