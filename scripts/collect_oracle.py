@@ -4,7 +4,7 @@ Usage (login node or CPU array):
   JAX_PLATFORMS=cpu MUJOCO_GL=disable python collect_oracle.py \
       --env_name=cube-double-play-v0 --base_policy=gciql-sd0 \
       --tasks=1,2,3,4,5 --eps_per_task=5 --states_per_ep=8 \
-      --out_dir=/scratch/jwquan/wmpp/oracle
+      --out_dir=/path/to/oracle
 
 Writes <out_dir>/<env_name>/chunk_task<T>.npz per task; --merge merges chunks
 into states.npz/branches.npz/branches.csv/meta.json and prints headroom.
@@ -32,7 +32,7 @@ from world_model.rollout import TransitionCounter
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('env_name', 'cube-double-play-v0', 'OGBench dataset name.')
-flags.DEFINE_string('policy_root', '/scratch/jwquan/wmpp/policies/p1/OGBench/p1-pilot', 'Bank root.')
+flags.DEFINE_string('policy_root', '/path/to/policies/p1-pilot', 'Bank root.')
 flags.DEFINE_integer('epoch', 1000000, 'Checkpoint epoch.')
 flags.DEFINE_string('base_policy', None, 'Bank policy generating base episodes (also the merge-time headroom reference).')
 flags.DEFINE_string('base', None, 'Trajectory generator: wmpp:<k> (RolloutRanker at k=c), random:<c> (Random-Switch), or a bank '
@@ -42,7 +42,7 @@ flags.DEFINE_integer('wm_epoch', 1000000, 'World-model checkpoint step.')
 flags.DEFINE_string('seeds', '', 'Comma list of bank training seeds for the generator bank AND the branch pool (default all).')
 flags.DEFINE_integer('random_seed', 0, 'Draw-stream seed of Random-Switch (matches eval_planner --random_seed).')
 flags.DEFINE_string('score_agg', 'max', 'Horizon aggregation of the wmpp base.')
-flags.DEFINE_string('check_dir', '/scratch/jwquan/wmpp/planner_eval', 'Planner-eval root used to verify that the generator '
+flags.DEFINE_string('check_dir', '/path/to/planner_eval', 'Planner-eval root used to verify that the generator '
                     'reproduces the official-protocol episodes of the same variant (determinism check).')
 flags.DEFINE_bool('assert_match', True, 'Fail if the determinism check finds a mismatch.')
 flags.DEFINE_string('tasks', '1,2,3,4,5', 'Comma-separated task ids for this chunk.')
@@ -50,7 +50,7 @@ flags.DEFINE_integer('eps_per_task', 5, 'Base episodes per task.')
 flags.DEFINE_integer('states_per_ep', 8, 'Decision states kept per episode.')
 flags.DEFINE_integer('snapshot_every', None, 'Snapshot period (default: 50 loco / 25 manip).')
 flags.DEFINE_integer('save_horizon', 100, 'Branch obs/action steps stored for diagnostics.')
-flags.DEFINE_string('out_dir', '/scratch/jwquan/wmpp/oracle', 'Output root.')
+flags.DEFINE_string('out_dir', '/path/to/oracle', 'Output root.')
 flags.DEFINE_bool('merge', False, 'Merge chunk files instead of collecting.')
 
 

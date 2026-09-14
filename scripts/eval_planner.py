@@ -33,7 +33,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('env_name', None, 'OGBench dataset name.', required=True)
 flags.DEFINE_string('wm_dir', None, 'World-model run dir.', required=True)
 flags.DEFINE_integer('wm_epoch', 500000, 'WM checkpoint step.')
-flags.DEFINE_string('policy_root', '/scratch/jwquan/wmpp/policies/p1/OGBench/p1-pilot', 'Bank root.')
+flags.DEFINE_string('policy_root', '/path/to/policies/p1-pilot', 'Bank root.')
 flags.DEFINE_integer('policy_epoch', 1000000, 'Policy epoch.')
 flags.DEFINE_string('seeds', '0', 'Bank training seeds to include (comma-separated).')
 flags.DEFINE_string('best_fixed', None, 'Best-fixed policy name (from ID validation).', required=True)
@@ -133,8 +133,8 @@ flags.DEFINE_string('bank_extra', None, 'Comma list of <env_name>:<policy_root>[
 flags.DEFINE_string('sim_oracle_commit', None, 'Comma list of c: dynamic simulator oracle sim_oracle_commit<c> '
                     '(every bank policy branched in the real simulator to episode end; privileged upper bound).')
 flags.DEFINE_integer('episodes_per_task', 20, 'Paired episodes per task.')
-flags.DEFINE_string('oracle_dir', '/scratch/jwquan/wmpp/oracle', 'Oracle root (headroom reference).')
-flags.DEFINE_string('out_dir', '/scratch/jwquan/wmpp/planner_eval', 'Output root.')
+flags.DEFINE_string('oracle_dir', '/path/to/oracle', 'Oracle root (headroom reference).')
+flags.DEFINE_string('out_dir', '/path/to/planner_eval', 'Output root.')
 
 
 def env_id_of(dataset_name):

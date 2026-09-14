@@ -12,7 +12,7 @@ Requires: OGBENCH_IMPLS env var pointing at the impls/ directory.
 import os
 import sys
 
-IMPLS = os.environ.get('OGBENCH_IMPLS', '/project/6067317/jwquan/ogbench/impls')
+IMPLS = os.environ.get('OGBENCH_IMPLS', '/path/to/ogbench/impls')
 sys.path.insert(0, IMPLS)
 os.chdir(IMPLS)  # main.py resolves --agent=agents/X.py relative to impls/
 

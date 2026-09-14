@@ -39,13 +39,13 @@ from paper_common import hier_boot, paired_rows  # noqa: E402
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('envs', 'all', 'Comma-separated env names, or "all".')
-flags.DEFINE_string('eval_root', '/scratch/jwquan/wmpp/planner_eval', 'Planner eval root.')
+flags.DEFINE_string('eval_root', '/path/to/planner_eval', 'Planner eval root.')
 flags.DEFINE_string('dir_tag', 'og50', 'Suffix of per-seed eval dirs.')
 flags.DEFINE_string('seeds', '0,1,2', 'Bank seeds to aggregate.')
 flags.DEFINE_integer('n_boot', 10000, 'Bootstrap resamples.')
 flags.DEFINE_string('env_config', os.path.join(ROOT, 'manifests', 'wmpp_env_config.json'),
                     'Per-env eval.csv baselines (OGBench test, 250 eps per seed).')
-flags.DEFINE_string('abl_json', '/scratch/jwquan/wmpp/planner_eval/ablation_abl.json',
+flags.DEFINE_string('abl_json', '/path/to/planner_eval/ablation_abl.json',
                     'Prior ablation report (fixed-policy act-ms anchor).')
 flags.DEFINE_string('out', None, 'Output prefix (default: <eval_root>/og50_report).')
 flags.DEFINE_bool('onestep_as_cell', False, 'Treat (1,1) as one more k=c cell of the hyperparameter sweep '

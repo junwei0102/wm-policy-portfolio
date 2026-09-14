@@ -11,7 +11,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-IMPLS = os.environ.get('OGBENCH_IMPLS', '/project/6067317/jwquan/ogbench/impls')
+IMPLS = os.environ.get('OGBENCH_IMPLS', '/path/to/ogbench/impls')
 sys.path.insert(0, IMPLS)
 
 import numpy as np
@@ -38,11 +38,11 @@ flags.DEFINE_integer('train_steps', 500000, 'Number of training steps.')
 flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('val_interval', 5000, 'Validation interval.')
 flags.DEFINE_integer('save_interval', 100000, 'Checkpoint interval.')
-flags.DEFINE_string('wandb_entity', 'distill-llms', 'W&B entity.')
+flags.DEFINE_string('wandb_entity', 'YOUR_WANDB_ENTITY', 'W&B entity.')
 flags.DEFINE_string('wandb_project', 'wmogbench', 'W&B project.')
 flags.DEFINE_string(
     'wandb_dir',
-    '/scratch/jwquan/wmpp/wandb',
+    '/path/to/wandb',
     'Persistent W&B data dir (survives the job if a run must be re-synced).',
 )
 

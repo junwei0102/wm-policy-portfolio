@@ -1,5 +1,5 @@
 # Python 3.10. Versions are those of the environment that produced every number
-# in the paper (/scratch/jwquan/wmpp/venv, 2026-08); pinned as lower bounds.
+# in the paper (2026-08); pinned as lower bounds.
 # OGBench itself is NOT listed: install the pinned checkout (v1.2.1, commit
 # 1d41409) as an editable package with its [train] extras and point
 # OGBENCH_IMPLS at its impls/ directory (see README.md).

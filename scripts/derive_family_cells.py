@@ -53,7 +53,7 @@ def dataset_diagonal(eval_root, env, tag, prefix='score'):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--eval_root', default='/scratch/jwquan/wmpp/planner_eval')
+    ap.add_argument('--eval_root', default='/path/to/planner_eval')
     ap.add_argument('--tag', default='og50val', help='held-out sweep tag (episodes 50-99)')
     ap.add_argument('--json', default=None)
     ap.add_argument('--scorer', default='', help='per-family scorer override, e.g. "puzzle=og50crval:critic": '

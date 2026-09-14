@@ -21,7 +21,7 @@ import ml_collections
 import numpy as np
 import optax
 
-IMPLS = os.environ.get('OGBENCH_IMPLS', '/project/6067317/jwquan/ogbench/impls')
+IMPLS = os.environ.get('OGBENCH_IMPLS', '/path/to/ogbench/impls')
 if IMPLS not in sys.path:
     sys.path.insert(0, IMPLS)
 
