@@ -37,3 +37,8 @@ tests/run_round2.py
 tests/test_round2.py
 world_model/rollout_batch.py
 ogbench.pdf
+
+# Local collaboration/dev-tooling docs, not part of the repository
+CLAUDE.md
+RUNBOOK.md
+.mcp.json
