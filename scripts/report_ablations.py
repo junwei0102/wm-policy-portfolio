@@ -37,6 +37,7 @@ flags.DEFINE_string('eval_root', '/scratch/jwquan/wmpp/planner_eval', 'Planner e
 flags.DEFINE_string('lavl_family_k', 'maze:1,cube:5,scene:10,puzzle:100', 'Metric-value interval per family; used as the ablation reference cell for families that report the direct value.')
 flags.DEFINE_string('main_tags', 'og50,og50k5,og50r1,og50cr', 'Dir tags holding the official-protocol sweep runs.')
 flags.DEFINE_string('fixed_tag', 'og50fx', 'Dir tag with every fixed bank policy on the same episode seeds.')
+flags.DEFINE_string('mpc_every_tag', 'og50mpc1n6', 'Dir tag of the every-step (c=1) N=6 action-level MPC runs.')
 flags.DEFINE_string('abl_tag', 'og50abl,og50abl2,og50abl3,og50abl4', 'Comma list of dir tags of the E1/E3 ablation runs (later tags override).')
 flags.DEFINE_string('sim_tag', 'og50sim,og50sim1,og50sim3,og50sim4', 'Comma list of dir tags of the true-simulator rollout runs.')
 flags.DEFINE_string('simor_tag', 'og50simor', 'Dir tag of the dynamic simulator oracle runs (sim_oracle_commit25).')
@@ -196,8 +197,20 @@ def main(_):
                     if got:
                         return got
             return None
-        add('PolicyMpc', mpc_rows('mpc'))
+        # PolicyMpcK: the earlier committed search (N=32, sigma 0.2, re-planned every c=k steps; tag og50mpcf). Kept for the
+        # record (rebuttal), no longer the paper's column. Consumes the shared rng exactly as before, so every other table is unchanged.
+        add('PolicyMpcK', mpc_rows('mpc'))
         add('PortfolioMpc', mpc_rows('pmpc'))
+        # PolicyMpc (the paper's Table "WM action search", user decision 2026-09-16): every-step action-level MPC, c=1,
+        # family horizon k, N=6 candidates (policy mean + 5 Gaussian, sigma 0.2), tag og50mpc1n6; budget N*E*k = 18k per env
+        # step (maze 18 = WMPP, cube 90, scene/puzzle 180). Not run on cube-quadruple (every method at 0) -> those rows drop.
+        every = all_seeds(lambda s: next((vv for nm2, vv in rows_by_policy(env_dir, s, FLAGS.mpc_every_tag).items()
+                                          if nm2.startswith('mpc6_') and nm2.endswith('_commit1')), None))
+        _rng_shared = rng; rng = np.random.default_rng(20260916)  # own stream: leaves the shared stream untouched
+        add('PolicyMpc', every)
+        rng = _rng_shared
+        if r['rows'].get('PolicyMpc') and r['rows'].get('PolicyMpcK'):
+            r['rows']['PolicyMpc']['d_mpck'] = contrast(every, mpc_rows('mpc'), FLAGS.n_boot, np.random.default_rng(20260916))  # every-step minus c=k search
         # dynamic simulator oracle (privileged) and WMPP at the matched (25,25) cell
         add('SimOracle', all_seeds(lambda s: rows_by_policy(env_dir, s, FLAGS.simor_tag).get('sim_oracle_commit25')))
         if r['rows'].get('SimOracle'):
@@ -308,7 +321,7 @@ def main(_):
         lines.append(' & '.join(
             [tex_env(env), f'$({r["k"]},{r["k"]})$', best_cell(r, top), wmpp_cell(r, top)]
             + [cell(r['rows'].get(c), top) for c in cols]) + ' \\\\')
-    for c in cols + ['OneStep', 'PolicyMpc', 'PortfolioMpc', 'Selector', 'SimSel', 'SimOne', 'SimOracle', 'QselOne', 'QselSel']:
+    for c in cols + ['OneStep', 'PolicyMpc', 'PolicyMpcK', 'PortfolioMpc', 'Selector', 'SimSel', 'SimOne', 'SimOracle', 'QselOne', 'QselSel']:
         pres = [e for e in envs if R[e]['rows'].get(c) and not R[e]['rows'][c].get('same_as_wmpp')]  # a (1,1) row on a k=1 dataset IS WMPP: no contrast
         vals = [100 * R[e]['rows'][c]['mean'] for e in pres]
         deltas = [100 * R[e]['rows'][c]['d_wmpp']['delta'] for e in pres if 'd_wmpp' in R[e]['rows'][c]]
@@ -379,7 +392,7 @@ def main(_):
                     macros[f'AblDelta{c}{macro_key(env)}'] = fmt_ci(R[env]['rows'][c]['d_wmpp'])
     with open(os.path.join(tdir, 'search.tex'), 'w') as f:
         f.write('\\begin{tabular}{lccc|c}\n\\toprule\n'
-                'Dataset & $(k,c)$ & Best & WM action search on Best & \\wmpp \\\\\n\\midrule\n'
+                'Dataset & $(k,c)$ of \\wmpp & Best & every-step WM action search on Best & \\wmpp \\\\\n\\midrule\n'
                 + '\n'.join(lines) + '\n\\bottomrule\n\\end{tabular}\n')
     # true-simulator rollouts on every dataset (W9)
     lines = []
