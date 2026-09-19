@@ -145,6 +145,8 @@ def main(_):
         D = W if pref == 'critic' else O
         e['direct_wmpa'] = dict(mean=seed_mean(D), hw=rows_hw(D)) if D else None
         e['direct_vs_qsel'] = {lab: (contrast(D, Q[c], FLAGS.n_boot, rng) if (D and Q[c]) else None) for lab, c in (('c1', 1), ('ck', k))}
+        # full system vs the cheap alternative: the REPORTED head against Q-select re-deciding every step
+        e['wmpa_vs_qsel'] = {lab: (contrast(W, Q[c], FLAGS.n_boot, rng) if Q[c] else None) for lab, c in (('c1', 1), ('ck', k))}
         out[env] = dict(A=e)
         cell = lambda d: '--' if d is None else f"{100 * d['mean']:.0f} ± {d['hw']:.0f}"
         qcell = lambda d: '--' if d is None else f"{cell(d)} (c={d['c']})"
@@ -238,7 +240,10 @@ def main(_):
         lines, macros = [], {}
         sig_down = lambda d: d is not None and d.get('significant') and d['delta'] < 0
         sig_up = lambda d: d is not None and d.get('significant') and d['delta'] > 0
-        counts = {c: dict(n=0, down=0, up=0, above_best=0, deltas=[]) for c in ('Other', 'QselOne', 'QselK', 'DirectQselOne', 'DirectQselK')}
+        counts = {c: dict(n=0, down=0, up=0, above_best=0, below_best=0, deltas=[])
+                  for c in ('Other', 'QselOne', 'QselK', 'DirectQselOne', 'DirectQselK', 'FullQselOne', 'FullQselK')}
+        fam_of = {en: fam for fam, es in FAMILIES for en in es}
+        fam_rows, prev_fam = {}, None
         for env in envs:
             e = out[env]['A']
             metric = e['wmpa'] if e['scorer'] == 'metric' else e['other_scorer']
@@ -248,9 +253,18 @@ def main(_):
             tcell = lambda v, mark='': '--' if v is None else fmt_pm_ci(100 * v['mean'], v['hw'], bold=near_top(100 * v['mean'], top)) + mark
             dag_m = '$^{\\dagger}$' if e['scorer'] == 'metric' else ''
             dag_d = '$^{\\dagger}$' if e['scorer'] == 'direct' else ''
-            dk = e['direct_vs_qsel']['ck']
+            d1, dk = e['wmpa_vs_qsel']['c1'], e['direct_vs_qsel']['ck']
+            fam = fam_of.get(env, '')
+            if prev_fam is not None and fam != prev_fam:
+                lines.append('\\midrule')
+            prev_fam = fam
             lines.append(' & '.join([tex_env(env), f"$({e['k']},{e['k']})$", tcell(e['best_fixed']), tcell(metric, dag_m), tcell(direct, dag_d),
-                                     tcell(e['qsel']['c1']), tcell(e['qsel']['ck']), '--' if dk is None else fmt_ci(dk)]) + ' \\\\')
+                                     tcell(e['qsel']['c1']), tcell(e['qsel']['ck']),
+                                     '--' if d1 is None else fmt_ci(d1), '--' if dk is None else fmt_ci(dk)]) + ' \\\\')
+            g = lambda v: 100 * v['mean'] if v else float('nan')
+            fam_rows.setdefault(fam, []).append(dict(
+                best=g(e['best_fixed']), metric=g(metric), direct=g(direct), q1=g(e['qsel']['c1']), qk=g(e['qsel']['ck']),
+                d1=100 * d1['delta'] if d1 else float('nan'), dk=100 * dk['delta'] if dk else float('nan')))
             key = macro_key(env)
             for c, v in ents.items():
                 if v is None:
@@ -262,8 +276,16 @@ def main(_):
                 counts[c]['n'] += 1; counts[c]['deltas'].append(100 * v['d_wmpa']['delta'])
                 counts[c]['down'] += int(sig_down(v['d_wmpa'])); counts[c]['up'] += int(sig_up(v['d_wmpa']))
                 counts[c]['above_best'] += int(sig_up(v.get('d_best')))
+                counts[c]['below_best'] += int(sig_down(v.get('d_best')))
             if e['direct_wmpa']:
                 macros[f'MechDirect{key}'] = f"{100 * e['direct_wmpa']['mean']:.0f}"
+            for lab, c in (('FullQselOne', 'c1'), ('FullQselK', 'ck')):
+                d = e['wmpa_vs_qsel'][c]
+                if d is None:
+                    continue
+                macros[f'Mech{lab}{key}'] = fmt_ci(d)  # reported-head WMPA minus Q-select
+                counts[lab]['n'] += 1; counts[lab]['deltas'].append(100 * d['delta'])
+                counts[lab]['down'] += int(sig_down(d)); counts[lab]['up'] += int(sig_up(d))
             for lab, c in (('DirectQselOne', 'c1'), ('DirectQselK', 'ck')):
                 d = e['direct_vs_qsel'][c]
                 if d is None:
@@ -274,12 +296,34 @@ def main(_):
         for c, d in counts.items():
             macros[f'MechNumEnvs{c}'] = str(d['n']); macros[f'MechNumDown{c}'] = str(d['down']); macros[f'MechNumUp{c}'] = str(d['up'])
             macros[f'MechNumAboveBest{c}'] = str(d['above_best'])
+            macros[f'MechNumBelowBest{c}'] = str(d['below_best'])
             macros[f'MechMeanDelta{c}'] = f"{np.mean(d['deltas']):+.0f}" if d['deltas'] else '--'
+        # Family means of the two questions the table answers: is the full system worth it
+        # against a cheap selector that re-decides every step, and does imagination add
+        # anything once the execution schedule is matched?
+        agg = lambda rs, key: np.nanmean([r[key] for r in rs])
+        fam_summary = ['\\midrule', '\\multicolumn{9}{l}{\\emph{Mean over the datasets of each family}} \\\\']
+        for fam, _ in FAMILIES:
+            rs = fam_rows.get(fam)
+            if not rs:
+                continue
+            fam_summary.append(' & '.join([f'{fam} ({len(rs)})', '', f"${agg(rs, 'best'):.0f}$", f"${agg(rs, 'metric'):.0f}$",
+                                       f"${agg(rs, 'direct'):.0f}$", f"${agg(rs, 'q1'):.0f}$", f"${agg(rs, 'qk'):.0f}$",
+                                       f"{agg(rs, 'd1'):+.0f}", f"{agg(rs, 'dk'):+.0f}"]) + ' \\\\')
+            macros[f'MechFamFullQselOne{fam}'] = f"{agg(rs, 'd1'):+.0f}"
+            macros[f'MechFamDirectQselK{fam}'] = f"{agg(rs, 'dk'):+.0f}"
+        allr = [r for rs in fam_rows.values() for r in rs]
+        fam_summary.append(' & '.join([f'All ({len(allr)})', '', f"${agg(allr, 'best'):.0f}$", f"${agg(allr, 'metric'):.0f}$",
+                                   f"${agg(allr, 'direct'):.0f}$", f"${agg(allr, 'q1'):.0f}$", f"${agg(allr, 'qk'):.0f}$",
+                                   f"{agg(allr, 'd1'):+.0f}", f"{agg(allr, 'dk'):+.0f}"]) + ' \\\\')
         with open(os.path.join(tdir, 'scorer_selector.tex'), 'w') as f:
-            f.write('\\begin{tabular}{lcc|cc|cc|r}\n\\toprule\n'
-                    ' & & & \\multicolumn{2}{c|}{\\wmpp{} (imagined states)} & \\multicolumn{2}{c|}{Q-select (no rollout)} & \\\\\n\\cmidrule(lr){4-5}\\cmidrule(lr){6-7}\n'
-                    'Dataset & $(k,c)$ & Best & metric value & direct value & $c{=}1$ & $c{=}k$ & $\\Delta$ (direct $-$ Q-select, $c{=}k$) \\\\\n\\midrule\n'
-                    + '\n'.join(lines) + '\n\\bottomrule\n\\end{tabular}\n')
+            f.write('\\begin{tabular}{lcc|cc|cc|rr}\n\\toprule\n'
+                    ' & & & \\multicolumn{2}{c|}{\\wmpp{} (imagined states)} & \\multicolumn{2}{c|}{Q-select (no rollout)}'
+                    ' & \\multicolumn{2}{c}{$\\Delta$ (paired)} \\\\\n'
+                    '\\cmidrule(lr){4-5}\\cmidrule(lr){6-7}\\cmidrule(lr){8-9}\n'
+                    'Dataset & $(k,c)$ & Best & metric value & direct value & $c{=}1$ & $c{=}k$'
+                    ' & \\wmpp{} $-$ Q-sel ($c{=}1$) & direct $-$ Q-sel ($c{=}k$) \\\\\n\\midrule\n'
+                    + '\n'.join(lines + fam_summary) + '\n\\bottomrule\n\\end{tabular}\n')
         with open(os.path.join(tdir, 'numbers_mechanism.tex'), 'w') as f:
             f.write('% Auto-generated by scripts/report_mechanism.py -- do not edit.\n')
             for kk, vv in macros.items():

@@ -1,26 +1,36 @@
-\begin{tabular}{lcc|cc|cc|r}
+\begin{tabular}{lcc|cc|cc|rr}
 \toprule
- & & & \multicolumn{2}{c|}{\wmpp{} (imagined states)} & \multicolumn{2}{c|}{Q-select (no rollout)} & \\
-\cmidrule(lr){4-5}\cmidrule(lr){6-7}
-Dataset & $(k,c)$ & Best & metric value & direct value & $c{=}1$ & $c{=}k$ & $\Delta$ (direct $-$ Q-select, $c{=}k$) \\
+ & & & \multicolumn{2}{c|}{\wmpp{} (imagined states)} & \multicolumn{2}{c|}{Q-select (no rollout)} & \multicolumn{2}{c}{$\Delta$ (paired)} \\
+\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+Dataset & $(k,c)$ & Best & metric value & direct value & $c{=}1$ & $c{=}k$ & \wmpp{} $-$ Q-sel ($c{=}1$) & direct $-$ Q-sel ($c{=}k$) \\
 \midrule
-\texttt{pointmaze-medium-navigate} & $(1,1)$ & $\mathbf{76 \pm 17}$ & $\mathbf{79 \pm 3}$$^{\dagger}$ & $56 \pm 8$ & $53 \pm 9$ & $53 \pm 9$ & +3 [+1, +4]* \\
-\texttt{antmaze-large-navigate} & $(1,1)$ & $\mathbf{90 \pm 3}$ & $\mathbf{91 \pm 3}$$^{\dagger}$ & $28 \pm 4$ & $26 \pm 6$ & $26 \pm 6$ & +2 [-2, +6] \\
-\texttt{cube-single-play} & $(5,5)$ & $71 \pm 3$ & $\mathbf{85 \pm 3}$$^{\dagger}$ & $76 \pm 4$ & $67 \pm 20$ & $58 \pm 23$ & +18 [+2, +44]* \\
-\texttt{cube-single-noisy} & $(5,5)$ & $\mathbf{99 \pm 1}$ & $\mathbf{100 \pm 0}$$^{\dagger}$ & $\mathbf{100 \pm 0}$ & $\mathbf{100 \pm 0}$ & $\mathbf{100 \pm 0}$ & +0 [-1, +1] \\
-\texttt{cube-double-play} & $(5,5)$ & $36 \pm 7$ & $\mathbf{69 \pm 3}$$^{\dagger}$ & $62 \pm 5$ & $51 \pm 5$ & $62 \pm 7$ & -0 [-5, +5] \\
-\texttt{cube-double-noisy} & $(5,5)$ & $26 \pm 9$ & $\mathbf{60 \pm 7}$$^{\dagger}$ & $45 \pm 6$ & $38 \pm 3$ & $38 \pm 6$ & +7 [+3, +12]* \\
-\texttt{cube-triple-play} & $(5,5)$ & $5 \pm 3$ & $1 \pm 1$$^{\dagger}$ & $\mathbf{9 \pm 2}$ & $3 \pm 2$ & $7 \pm 2$ & +2 [-1, +4] \\
-\texttt{cube-triple-noisy} & $(5,5)$ & $9 \pm 3$ & $\mathbf{18 \pm 3}$$^{\dagger}$ & $10 \pm 4$ & $7 \pm 3$ & $8 \pm 3$ & +2 [-1, +5] \\
-\texttt{scene-play} & $(10,10)$ & $52 \pm 5$ & $\mathbf{87 \pm 4}$$^{\dagger}$ & $68 \pm 4$ & $64 \pm 5$ & $61 \pm 5$ & +8 [+1, +13]* \\
-\texttt{scene-noisy} & $(10,10)$ & $30 \pm 3$ & $\mathbf{70 \pm 5}$$^{\dagger}$ & $57 \pm 4$ & $41 \pm 5$ & $48 \pm 5$ & +9 [+5, +13]* \\
-\texttt{puzzle-3x3-play} & $(10,10)$ & $91 \pm 4$ & $13 \pm 4$ & $\mathbf{100 \pm 0}$$^{\dagger}$ & $\mathbf{96 \pm 3}$ & $76 \pm 4$ & +24 [+20, +28]* \\
-\texttt{puzzle-3x3-noisy} & $(10,10)$ & $\mathbf{91 \pm 3}$ & $41 \pm 7$ & $\mathbf{93 \pm 2}$$^{\dagger}$ & $88 \pm 3$ & $\mathbf{93 \pm 2}$ & -0 [-3, +2] \\
-\texttt{puzzle-4x4-play} & $(10,10)$ & $24 \pm 5$ & $17 \pm 3$ & $\mathbf{51 \pm 8}$$^{\dagger}$ & $47 \pm 9$ & $26 \pm 5$ & +25 [+15, +37]* \\
-\texttt{puzzle-4x4-noisy} & $(10,10)$ & $34 \pm 5$ & $43 \pm 5$ & $\mathbf{58 \pm 11}$$^{\dagger}$ & $53 \pm 7$ & $55 \pm 10$ & +3 [-1, +7] \\
-\texttt{puzzle-4x5-play} & $(10,10)$ & $14 \pm 3$ & $10 \pm 3$ & $18 \pm 3$$^{\dagger}$ & $\mathbf{20 \pm 3}$ & $10 \pm 2$ & +8 [+5, +11]* \\
-\texttt{puzzle-4x5-noisy} & $(10,10)$ & $\mathbf{20 \pm 3}$ & $\mathbf{20 \pm 3}$ & $\mathbf{20 \pm 3}$$^{\dagger}$ & $\mathbf{20 \pm 3}$ & $18 \pm 3$ & +2 [+1, +3]* \\
-\texttt{puzzle-4x6-play} & $(10,10)$ & $11 \pm 2$ & $13 \pm 3$ & $17 \pm 3$$^{\dagger}$ & $\mathbf{20 \pm 3}$ & $7 \pm 2$ & +10 [+7, +13]* \\
-\texttt{puzzle-4x6-noisy} & $(10,10)$ & $\mathbf{19 \pm 3}$ & $13 \pm 3$ & $\mathbf{20 \pm 3}$$^{\dagger}$ & $\mathbf{19 \pm 3}$ & $18 \pm 3$ & +2 [+1, +4]* \\
+\texttt{pointmaze-medium-navigate} & $(1,1)$ & $\mathbf{76 \pm 17}$ & $\mathbf{79 \pm 3}$$^{\dagger}$ & $56 \pm 8$ & $53 \pm 9$ & $53 \pm 9$ & +26 [+19, +35]* & +3 [+1, +4]* \\
+\texttt{antmaze-large-navigate} & $(1,1)$ & $\mathbf{90 \pm 3}$ & $\mathbf{91 \pm 3}$$^{\dagger}$ & $28 \pm 4$ & $26 \pm 6$ & $26 \pm 6$ & +65 [+59, +69]* & +2 [-2, +6] \\
+\midrule
+\texttt{cube-single-play} & $(5,5)$ & $71 \pm 3$ & $\mathbf{85 \pm 3}$$^{\dagger}$ & $76 \pm 4$ & $67 \pm 20$ & $58 \pm 23$ & +18 [+2, +39]* & +18 [+2, +44]* \\
+\texttt{cube-single-noisy} & $(5,5)$ & $\mathbf{99 \pm 1}$ & $\mathbf{100 \pm 0}$$^{\dagger}$ & $\mathbf{100 \pm 0}$ & $\mathbf{100 \pm 0}$ & $\mathbf{100 \pm 0}$ & +0 [-0, +0] & +0 [-1, +1] \\
+\texttt{cube-double-play} & $(5,5)$ & $36 \pm 7$ & $\mathbf{69 \pm 3}$$^{\dagger}$ & $62 \pm 5$ & $51 \pm 5$ & $62 \pm 7$ & +18 [+13, +23]* & -0 [-5, +5] \\
+\texttt{cube-double-noisy} & $(5,5)$ & $26 \pm 9$ & $\mathbf{60 \pm 7}$$^{\dagger}$ & $45 \pm 6$ & $38 \pm 3$ & $38 \pm 6$ & +22 [+16, +30]* & +7 [+3, +11]* \\
+\texttt{cube-triple-play} & $(5,5)$ & $5 \pm 3$ & $1 \pm 1$$^{\dagger}$ & $\mathbf{9 \pm 2}$ & $3 \pm 2$ & $7 \pm 2$ & -2 [-5, -1]* & +2 [-1, +4] \\
+\texttt{cube-triple-noisy} & $(5,5)$ & $9 \pm 3$ & $\mathbf{18 \pm 3}$$^{\dagger}$ & $10 \pm 4$ & $7 \pm 3$ & $8 \pm 3$ & +11 [+8, +14]* & +2 [-1, +5] \\
+\midrule
+\texttt{scene-play} & $(10,10)$ & $52 \pm 5$ & $\mathbf{87 \pm 4}$$^{\dagger}$ & $68 \pm 4$ & $64 \pm 5$ & $61 \pm 5$ & +23 [+17, +31]* & +8 [+1, +13]* \\
+\texttt{scene-noisy} & $(10,10)$ & $30 \pm 3$ & $\mathbf{70 \pm 5}$$^{\dagger}$ & $57 \pm 4$ & $41 \pm 5$ & $48 \pm 5$ & +29 [+24, +34]* & +9 [+5, +13]* \\
+\midrule
+\texttt{puzzle-3x3-play} & $(10,10)$ & $91 \pm 4$ & $13 \pm 4$ & $\mathbf{100 \pm 0}$$^{\dagger}$ & $\mathbf{96 \pm 3}$ & $76 \pm 4$ & +4 [+1, +8]* & +24 [+20, +28]* \\
+\texttt{puzzle-3x3-noisy} & $(10,10)$ & $\mathbf{91 \pm 3}$ & $41 \pm 7$ & $\mathbf{93 \pm 2}$$^{\dagger}$ & $88 \pm 3$ & $\mathbf{93 \pm 2}$ & +5 [+2, +8]* & -0 [-3, +2] \\
+\texttt{puzzle-4x4-play} & $(10,10)$ & $24 \pm 5$ & $17 \pm 3$ & $\mathbf{51 \pm 8}$$^{\dagger}$ & $47 \pm 9$ & $26 \pm 5$ & +4 [-0, +8] & +25 [+15, +37]* \\
+\texttt{puzzle-4x4-noisy} & $(10,10)$ & $34 \pm 5$ & $43 \pm 5$ & $\mathbf{58 \pm 11}$$^{\dagger}$ & $53 \pm 7$ & $55 \pm 10$ & +5 [-2, +11] & +3 [-1, +7] \\
+\texttt{puzzle-4x5-play} & $(10,10)$ & $14 \pm 3$ & $10 \pm 3$ & $18 \pm 3$$^{\dagger}$ & $\mathbf{20 \pm 3}$ & $10 \pm 2$ & -1 [-3, -0]* & +8 [+5, +11]* \\
+\texttt{puzzle-4x5-noisy} & $(10,10)$ & $\mathbf{20 \pm 3}$ & $\mathbf{20 \pm 3}$ & $\mathbf{20 \pm 3}$$^{\dagger}$ & $\mathbf{20 \pm 3}$ & $18 \pm 3$ & +0 [+0, +0] & +2 [+1, +3]* \\
+\texttt{puzzle-4x6-play} & $(10,10)$ & $11 \pm 2$ & $13 \pm 3$ & $17 \pm 3$$^{\dagger}$ & $\mathbf{20 \pm 3}$ & $7 \pm 2$ & -3 [-5, -0]* & +10 [+7, +13]* \\
+\texttt{puzzle-4x6-noisy} & $(10,10)$ & $\mathbf{19 \pm 3}$ & $13 \pm 3$ & $\mathbf{20 \pm 3}$$^{\dagger}$ & $\mathbf{19 \pm 3}$ & $18 \pm 3$ & +1 [-0, +2] & +2 [+1, +4]* \\
+\midrule
+\multicolumn{9}{l}{\emph{Mean over the datasets of each family}} \\
+Maze (2) &  & $83$ & $85$ & $42$ & $40$ & $40$ & +45 & +2 \\
+Cube (6) &  & $41$ & $55$ & $50$ & $44$ & $45$ & +11 & +5 \\
+Scene (2) &  & $41$ & $79$ & $63$ & $53$ & $54$ & +26 & +8 \\
+Puzzle (8) &  & $38$ & $21$ & $47$ & $45$ & $38$ & +2 & +9 \\
+All (18) &  & $44$ & $46$ & $49$ & $45$ & $42$ & +12 & +7 \\
 \bottomrule
 \end{tabular}
