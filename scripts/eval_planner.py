@@ -309,6 +309,7 @@ def main(_):
         assert critic_name in bank, (critic_name, sorted(bank))
         critic_fn = bank[critic_name].value
         qsel_fn = bank[critic_name].q_min
+    if critic_fn is not None:  # variants below need a critic, from a bank member or from the world model
         for k in (int(x) for x in FLAGS.critic_kc.split(',')) if FLAGS.critic_kc else []:
             name = f'critic{k}_commit{k}'
             assert name not in methods, name
