@@ -1,4 +1,4 @@
-"""Mechanism report on the five gain-carrying datasets (report to the author; no paper tables).
+"""Mechanism report on every dataset of the study (writes the paper's scorer/selector table).
 
   A. scorer x selector at the reported cell (k,k): Best | WMPA (reported scorer) | the other
      scorer at the same cell | Q-select at c=1, c=k and c=c* (c* = per-dataset held-out argmax
@@ -24,15 +24,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 from absl import app, flags
 
-from paper_common import KS, contrast, fmt_ci, fmt_pm_ci, macro_key, near_top, rows_by_policy, rows_hw, seed_mean, short, tex_env
+from paper_common import FAMILIES, KS, contrast, fmt_ci, fmt_pm_ci, macro_key, near_top, rows_by_policy, rows_hw, seed_mean, short, tex_env
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('envs', 'cube-double-play-v0,scene-play-v0,scene-noisy-v0,puzzle-3x3-play-v0,puzzle-4x4-play-v0', '')
+flags.DEFINE_string('envs', ','.join(e for _, es in FAMILIES for e in es), 'datasets to report (default: every dataset of the paper).')
 flags.DEFINE_string('eval_root', '/scratch/jwquan/wmpp/planner_eval', '')
 flags.DEFINE_string('report', '/scratch/jwquan/wmpp/planner_eval/og50_final_sweep.json', 'report_og50 JSON (selected cell, scorer, best policy).')
-flags.DEFINE_string('main_tags', 'og50,og50cr', 'sweep tags (metric diagonal; critic diagonal on puzzles).')
-flags.DEFINE_string('qv_tags', 'og50qv,og50qv2', 'direct-value (critic) runs on metric-value datasets.')
-flags.DEFINE_string('qsel_tags', 'og50qsel,og50qsel2', 'Q-select test runs (qsel_commit{c}).')
+flags.DEFINE_string('main_tags', 'og50,og50k5,og50r1,og50cr', 'sweep tags (metric diagonal; critic diagonal on puzzles).')
+flags.DEFINE_string('qv_tags', 'og50qv,og50qv2,og50qv3', 'direct-value (critic) runs on metric-value datasets.')
+flags.DEFINE_string('qsel_tags', 'og50qsel,og50qsel2,og50qsel3', 'Q-select test runs (qsel_commit{c}).')
 flags.DEFINE_string('qsel_val_tag', 'og50qselval', 'Q-select held-out runs (episodes 50-99).')
 flags.DEFINE_string('kc_tag', 'og50kc', 'off-diagonal (1,k)/(k,1) runs.')
 flags.DEFINE_string('fixed_tag', 'og50fx', '')
@@ -89,7 +89,7 @@ def main(_):
     report = {x['env_name']: x for x in json.load(open(FLAGS.report))}
     envs = FLAGS.envs.split(',')
     out, md = {}, []
-    md.append('# Mechanism report (5 datasets)\n')
+    md.append(f'# Mechanism report ({len(envs)} datasets)\n')
     md.append('Cells: mean success ± half-width of the 95% hierarchical-bootstrap interval (bank seeds, then episodes). '
               'Δ: paired per-episode contrast with its 95% interval; * = interval excludes zero. '
               'Test episodes 0–49 everywhere; held-out episodes 50–99 only for c*.\n')
@@ -187,6 +187,9 @@ def main(_):
             (1, k): (all_seeds(lambda s: kc[s].get(f'score1_commit{k}')), FLAGS.kc_tag),
             (k, 1): (all_seeds(lambda s: kc[s].get(f'score{k}_commit1')), FLAGS.kc_tag),
         }
+        if cells[(k, k)][0] is None:  # no diagonal rows under the sweep tags (e.g. a dataset run under another tag)
+            print(f'[mechanism] {env}: no (k,k) rows for the k/c grid, skipped')
+            continue
         n_ref = len(cells[(k, k)][0][0])
         g = {}
         for (kk, cc), (rows, tag) in cells.items():
