@@ -1,4 +1,5 @@
-"""Ensemble world model: full-observation delta dynamics + LAVL metric value head.
+"""Ensemble world model: full-observation delta dynamics + LAVL metric value head
+(and, optionally, a direct IQL value head trained jointly with it).
 
 Mirrors the OGBench impls agent pattern (flax.struct.PyTreeNode + ModuleDict +
 TrainState). Members are fully independent (disjoint params, mean of
@@ -211,6 +212,61 @@ class EnsembleWorldModel(flax.struct.PyTreeNode):
             info['smoothness_loss'] = sm
         return loss, info
 
+    # --- direct (IQL) value head -------------------------------------------------
+    # An MLP on the concatenated state-goal pair with twin action-value heads,
+    # trained jointly with the dynamics by exactly the objective GCIQL uses for
+    # its value/critic (expectile regression of V toward min_j Q_j, one-step
+    # Q targets bootstrapped through V). It gives the combinatorial families a
+    # scorer that the world model OWNS, instead of borrowing the value network
+    # of a bank member. Off by default (config direct_head=False), so existing
+    # checkpoints are unaffected.
+
+    def direct_v(self, obs, goals, params=None, module='direct_value'):
+        """V_theta(s, g) on raw observations; (..., d) -> (...)."""
+        x = jnp.concatenate([self.norm_obs(obs), self.norm_obs(goals)], axis=-1)
+        return jnp.squeeze(self.network.select(module)(x, params=params), axis=-1)
+
+    def direct_q(self, obs, goals, actions, params=None, module='direct_critic'):
+        """Twin Q_omega(s, a, g); (B, d) -> (2, B)."""
+        x = jnp.concatenate([self.norm_obs(obs), self.norm_obs(goals), actions], axis=-1)
+        return jnp.squeeze(self.network.select(module)(jnp.broadcast_to(x, (2, *x.shape)), params=params), axis=-1)
+
+    @jax.jit
+    def direct_value_score(self, obs, goals):
+        """'Higher is better' score of the direct head, for flat (N, d) inputs."""
+        return self.direct_v(obs, goals)
+
+    @jax.jit
+    def direct_q_min(self, obs, goals, actions):
+        """min_j Q_j(s, a, g) of the direct head (model-free Q-select scorer)."""
+        return jnp.min(self.direct_q(obs, goals, actions), axis=0)
+
+    def direct_value_loss(self, batch, grad_params):
+        """IQL expectile regression of V toward the target twin critic (gciql.py:value_loss)."""
+        expectile = self.config['direct_expectile']
+        obs, goals = batch['observations'], batch['value_goals']
+        actions = batch['action_seq'][:, 0]  # a_t of the (s_t, s_{t+1}) pair
+        q = jnp.min(self.direct_q(obs, goals, actions, module='target_direct_critic'), axis=0)
+        v = self.direct_v(obs, goals, params=grad_params)
+        diff = q - v
+        weight = jnp.where(diff >= 0, expectile, 1 - expectile)
+        loss = (weight * diff**2).mean()
+        return loss, {'value_loss': loss, 'v_mean': v.mean(), 'v_min': v.min(), 'v_max': v.max()}
+
+    def direct_critic_loss(self, batch, grad_params):
+        """One-step Q targets bootstrapped through V (gciql.py:critic_loss).
+
+        Rewards follow GCIQL's gc_negative=True convention (0 at attainment,
+        -1 otherwise); the sequence dataset stores the 0/1 indicator, hence -1.
+        """
+        gamma = self.config['direct_discount']
+        goals = batch['value_goals']
+        next_v = self.direct_v(batch['next_observations'], goals)
+        target = (batch['rewards'] - 1.0) + gamma * batch['masks'] * next_v
+        q = self.direct_q(batch['observations'], goals, batch['action_seq'][:, 0], params=grad_params)
+        loss = ((q - target[None]) ** 2).sum(axis=0).mean()
+        return loss, {'critic_loss': loss, 'q_mean': q.mean(), 'q_min': q.min(), 'q_max': q.max()}
+
     @jax.jit
     def total_loss(self, batch, grad_params, rng=None):
         info = {}
@@ -221,6 +277,12 @@ class EnsembleWorldModel(flax.struct.PyTreeNode):
         for k, v in val_info.items():
             info[f'value/{k}'] = v
         loss = dyn_loss + self.config['value_loss_weight'] * val_loss
+        if self.config.get('direct_head', False):
+            dv_loss, dv_info = self.direct_value_loss(batch, grad_params)
+            dc_loss, dc_info = self.direct_critic_loss(batch, grad_params)
+            for k, v in {**dv_info, **dc_info}.items():
+                info[f'direct/{k}'] = v
+            loss = loss + self.config['direct_loss_weight'] * (dv_loss + dc_loss)
         info['total_loss'] = loss
         return loss, info
 
@@ -240,6 +302,13 @@ class EnsembleWorldModel(flax.struct.PyTreeNode):
             new_network.params['modules_target_value'],
         )
         new_network.params['modules_target_value'] = new_target
+        if self.config.get('direct_head', False):
+            dtau = self.config['direct_tau']
+            new_network.params['modules_target_direct_critic'] = jax.tree_util.tree_map(
+                lambda p, tp: p * dtau + tp * (1 - dtau),
+                new_network.params['modules_direct_critic'],
+                new_network.params['modules_target_direct_critic'],
+            )
         return self.replace(network=new_network, rng=new_rng), info
 
     # --- construction / restore ---
@@ -268,6 +337,12 @@ class EnsembleWorldModel(flax.struct.PyTreeNode):
         config.setdefault('lavl_expectile', 0.9)
         config.setdefault('lavl_tau', 0.005)
         config.setdefault('lavl_smoothness_weight', 0.0)
+        # Optional direct (IQL) value head, trained jointly with the dynamics.
+        config.setdefault('direct_head', False)
+        config.setdefault('direct_discount', 0.99)
+        config.setdefault('direct_expectile', 0.9)
+        config.setdefault('direct_tau', 0.005)
+        config.setdefault('direct_loss_weight', 1.0)
 
         obs_dim = ex_observations.shape[-1]
         E = config['num_members']
@@ -293,12 +368,25 @@ class EnsembleWorldModel(flax.struct.PyTreeNode):
             target_value=ensemblize_split(LANValue, E)(**lan_kwargs),
         )
         ex_inputs = dict(dynamics=ex_dyn, value=(ex_obs_e, ex_obs_e), target_value=(ex_obs_e, ex_obs_e))
+        if config['direct_head']:
+            head_kwargs = dict(hidden_dims=(*config['hidden_dims'], 1), activate_final=False,
+                               layer_norm=config['layer_norm'])
+            modules['direct_value'] = MLP(**head_kwargs)
+            modules['direct_critic'] = ensemblize_split(MLP, 2)(**head_kwargs)
+            modules['target_direct_critic'] = ensemblize_split(MLP, 2)(**head_kwargs)
+            ex_sg = np.concatenate([ex_observations, ex_observations], axis=-1)
+            ex_sga = np.broadcast_to(np.concatenate([ex_sg, ex_actions], axis=-1), (2, *ex_sg.shape[:-1], ex_sg.shape[-1] + ex_actions.shape[-1]))
+            ex_inputs['direct_value'] = ex_sg
+            ex_inputs['direct_critic'] = ex_sga
+            ex_inputs['target_direct_critic'] = ex_sga
         network_def = ModuleDict(modules)
         network_tx = optax.adam(learning_rate=config['lr'])
         network_params = network_def.init(init_rng, **ex_inputs)['params']
         network = TrainState.create(network_def, network_params, tx=network_tx)
         # Target starts as an exact copy of the online head (lavl.py:create).
         network.params['modules_target_value'] = network.params['modules_value']
+        if config['direct_head']:
+            network.params['modules_target_direct_critic'] = network.params['modules_direct_critic']
 
         normalizer = {k: jnp.asarray(v) for k, v in norm_stats.items()}
         return cls(rng=rng, network=network, normalizer=normalizer, config=flax.core.FrozenDict(**config))
@@ -343,6 +431,12 @@ def get_config():
             lavl_expectile=0.9,
             lavl_tau=0.005,
             lavl_smoothness_weight=0.0,  # 10.0 for mazes/scene per LAVL's hyperparameters.sh
+            # Direct (IQL) value head trained jointly with the dynamics; GCIQL's settings.
+            direct_head=False,
+            direct_discount=0.99,
+            direct_expectile=0.9,
+            direct_tau=0.005,
+            direct_loss_weight=1.0,
             discount=0.99,
             p_curgoal=0.2,
             p_trajgoal=0.5,

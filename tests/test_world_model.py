@@ -265,3 +265,50 @@ if __name__ == '__main__':
     print('member independence PASS')
     test_rollout_counter()
     print('rollout/counter PASS')
+
+
+def test_direct_value_head():
+    """The optional direct (IQL) head trains jointly with the dynamics, keeps its
+    own target critic, and is absent unless config.direct_head is set."""
+    import numpy as np
+
+    from world_model.model import EnsembleWorldModel, get_config
+
+    cfg = get_config()
+    cfg.direct_head = True
+    cfg.horizon = 3
+    cfg.num_members = E
+    ex_o = np.zeros((1, OBS_DIM), np.float32)
+    ex_a = np.zeros((1, ACT_DIM), np.float32)
+    ns = {k: np.zeros(OBS_DIM, np.float32) for k in ('obs_mean', 'delta_mean')}
+    ns.update({k: np.ones(OBS_DIM, np.float32) for k in ('obs_std', 'delta_std')})
+    m = EnsembleWorldModel.create(0, ex_o, ex_a, ns, cfg)
+    assert 'modules_direct_value' in m.network.params and 'modules_target_direct_critic' in m.network.params
+
+    rng = np.random.default_rng(0)
+    B = 8
+    batch = dict(
+        obs_seq=rng.normal(size=(B, cfg.horizon + 1, OBS_DIM)).astype(np.float32),
+        action_seq=np.clip(rng.normal(size=(B, cfg.horizon, ACT_DIM)), -1, 1).astype(np.float32),
+        step_valid=np.ones((B, cfg.horizon), np.float32),
+        observations=rng.normal(size=(B, OBS_DIM)).astype(np.float32),
+        next_observations=rng.normal(size=(B, OBS_DIM)).astype(np.float32),
+        value_goals=rng.normal(size=(B, OBS_DIM)).astype(np.float32),
+        random_goals=rng.normal(size=(B, OBS_DIM)).astype(np.float32),
+        rewards=(rng.random(B) < 0.1).astype(np.float32),
+        masks=np.ones(B, np.float32),
+        step_weight=np.ones(cfg.horizon, np.float32),
+        ema_v_mean=np.float32(-1.0),
+    )
+    v0 = np.asarray(m.direct_value_score(batch['observations'], batch['value_goals']))
+    q0 = np.asarray(m.direct_q_min(batch['observations'], batch['value_goals'], batch['action_seq'][:, 0]))
+    assert v0.shape == (B,) and q0.shape == (B,)
+    for _ in range(20):
+        m, info = m.update(batch)
+    assert {'direct/value_loss', 'direct/critic_loss', 'dynamics/loss', 'value/expectile_loss'} <= set(info)
+    assert not np.allclose(v0, np.asarray(m.direct_value_score(batch['observations'], batch['value_goals'])))
+
+    plain = EnsembleWorldModel.create(0, ex_o, ex_a, ns, get_config())
+    assert 'modules_direct_value' not in plain.network.params
+    _, plain_info = plain.update(batch)
+    assert not [k for k in plain_info if k.startswith('direct/')]

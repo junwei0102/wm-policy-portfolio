@@ -76,7 +76,8 @@ flags.DEFINE_string(
     None,
     "Ablation of the LAVL head: score imagined states with this bank member's own "
     "goal-conditioned value network (e.g. 'gciql-sd0'; a bare family name such as "
-    "'gciql' resolves to that family's member for the single --seeds). Adds variants "
+    "'gciql' resolves to that family's member for the single --seeds); 'wm' uses the "
+    "world model's own jointly trained direct head instead. Adds variants "
     'critic{k}_commit{k} for every k in --critic_kc.',
 )
 flags.DEFINE_string('critic_kc', None, 'k=c cells for the --critic_scorer variants, e.g. "5,100".')
@@ -291,8 +292,15 @@ def main(_):
                                           score_mode=FLAGS.score_mode, score_agg=FLAGS.score_agg, ens_agg=ens)
             requested.append(name)
 
-    critic_name, critic_fn = None, None
-    if FLAGS.critic_scorer:
+    critic_name, critic_fn, qsel_fn = None, None, None
+    if FLAGS.critic_scorer == 'wm':
+        # The world model's OWN direct (IQL) value head, trained jointly with the
+        # dynamics (--wm.direct_head=True). Nothing is borrowed from a bank member.
+        assert wm.config.get('direct_head', False), 'the world model was trained without a direct value head'
+        critic_name = 'wm'
+        critic_fn = lambda o, g: np.asarray(wm.direct_value_score(o, g))
+        qsel_fn = lambda o, g, a: np.asarray(wm.direct_q_min(o, g, a))
+    elif FLAGS.critic_scorer:
         critic_name = FLAGS.critic_scorer
         if critic_name not in bank:
             seeds_l = [int(x) for x in FLAGS.seeds.split(',')]
@@ -300,6 +308,7 @@ def main(_):
             critic_name = f'{critic_name}-sd{seeds_l[0]}'
         assert critic_name in bank, (critic_name, sorted(bank))
         critic_fn = bank[critic_name].value
+        qsel_fn = bank[critic_name].q_min
         for k in (int(x) for x in FLAGS.critic_kc.split(',')) if FLAGS.critic_kc else []:
             name = f'critic{k}_commit{k}'
             assert name not in methods, name
@@ -328,7 +337,7 @@ def main(_):
             assert name not in methods, name
             variant_specs[name] = (0, c)  # k=0: no imagined transitions (budget assertion expects exactly zero)
             counters[name] = TransitionCounter()
-            methods[name] = CriticSelectArbiter(bank, bank[critic_name].q_min, c, seed=FLAGS.random_seed)
+            methods[name] = CriticSelectArbiter(bank, qsel_fn, c, seed=FLAGS.random_seed)
             requested.append(name)
 
     if FLAGS.classifier:
@@ -592,7 +601,7 @@ def main(_):
         else:
             print(f'Skipping oracle headroom: {branches_path} does not cover this bank.')
 
-    summary['critic_scorer'] = critic_name  # bank member whose V(s, g) scored critic* variants (None = LAVL head)
+    summary['critic_scorer'] = critic_name  # 'wm' = the model's own direct head; else the bank member whose V(s, g) scored critic* variants (None = LAVL head)
     summary['critic_select'] = {'critic': critic_name, 'commits': [int(x) for x in FLAGS.critic_select_commit.split(',')]} if FLAGS.critic_select_commit else None
     with open(os.path.join(out_dir, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2, default=float)
