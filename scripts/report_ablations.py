@@ -42,7 +42,7 @@ flags.DEFINE_string('abl_tag', 'og50abl,og50abl2,og50abl3,og50abl4', 'Comma list
 flags.DEFINE_string('sim_tag', 'og50sim,og50sim1,og50sim3,og50sim4', 'Comma list of dir tags of the true-simulator rollout runs.')
 flags.DEFINE_string('simor_tag', 'og50simor', 'Dir tag of the dynamic simulator oracle runs (sim_oracle_commit25).')
 flags.DEFINE_string('cls_tag', 'og50dscls,og50dscls2,og50dscls3', 'Comma list of dir tags of the learned gating-selector runs (cls-k*-c*).')
-flags.DEFINE_string('bankx_tag', 'og50bankx,og50bankxf,og50bankxf2', 'Comma list of dir tags of the pooled play+noisy bank runs (bankx_sd<s> / bankxfx_sd<s> labels).')
+flags.DEFINE_string('bankx_tag', 'og50bankx,og50bankxf,og50bankxf2,og50bankxf3,og50bankx4,og50bankxf4', 'Comma list of dir tags of the pooled play+noisy bank runs (bankx_sd<s> / bankxfx_sd<s> labels).')
 flags.DEFINE_integer('n_boot', 10000, 'Bootstrap resamples.')
 flags.DEFINE_string('envs', 'all', 'Comma-separated env subset, or "all".')
 flags.DEFINE_string('out_dir', os.path.join(ROOT, 'WMPP_ICLR2027'), 'Paper root (tables/ inside).')
