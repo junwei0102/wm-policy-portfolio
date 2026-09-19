@@ -85,8 +85,8 @@ flags.DEFINE_string('critic_select_commit', None, 'Re-selection intervals c for 
 # Sampling-MPC baseline on the best fixed policy (world-model search WITHOUT
 # a portfolio): N Gaussian perturbations of the policy action, imagined k
 # steps, value-head scored, replanned every c steps. Off when --mpc_n=0.
-flags.DEFINE_integer('mpc_n', 0, 'Number of MPC candidates incl. the unperturbed policy mean (0 = off).')
-flags.DEFINE_float('mpc_sigma', 0.2, 'Std of the action perturbation (= actor temperature).')
+flags.DEFINE_string('mpc_n', '0', 'Comma-separated candidate counts incl. the unperturbed policy mean (0 = off).')
+flags.DEFINE_string('mpc_sigma', '0.2', 'Comma-separated stds of the action perturbation (= actor temperature).')
 flags.DEFINE_string('mpc_k', '1', 'Comma-separated MPC imagination horizons k.')
 flags.DEFINE_string('mpc_commit', '1', 'Comma-separated MPC commit intervals c.')
 flags.DEFINE_string('mpc_policy', None, 'Policy used as the MPC prior (default: --best_fixed).')
@@ -394,33 +394,41 @@ def main(_):
     mpc_cells = list(dict.fromkeys(mpc_cells))
     if FLAGS.pmpc_n_per:
         for k, c in mpc_cells:
-            name = f'pmpc{FLAGS.pmpc_n_per}_s{FLAGS.mpc_sigma:g}_score{k}_commit{c}'
+            pmpc_sigma = float(str(FLAGS.mpc_sigma).split(',')[0])  # the portfolio variant takes a single sigma
+            name = f'pmpc{FLAGS.pmpc_n_per}_s{pmpc_sigma:g}_score{k}_commit{c}'
             variant_specs[name] = (k, c)
             counters[name] = TransitionCounter()
-            methods[name] = PortfolioMPC(wm, bank, counters[name], n_per=FLAGS.pmpc_n_per, sigma=FLAGS.mpc_sigma,
+            methods[name] = PortfolioMPC(wm, bank, counters[name], n_per=FLAGS.pmpc_n_per, sigma=pmpc_sigma,
                                          horizon=k, replan_every=c, score_agg=FLAGS.score_agg, seed=FLAGS.random_seed)
             requested.append(name)
             branches[name] = FLAGS.pmpc_n_per * len(bank)
-    if FLAGS.mpc_n:
+    if FLAGS.mpc_n != '0':
         mpc_policy = FLAGS.mpc_policy or FLAGS.best_fixed
         assert mpc_policy in bank or mpc_policy in extra, (mpc_policy, sorted(bank), sorted(extra))
         prior = bank[mpc_policy] if mpc_policy in bank else methods[mpc_policy]
-        for k, c in mpc_cells:
-            pref = 'critic' if critic_fn is not None else 'score'  # which value scores the candidates
-            if FLAGS.mpc_candidates == 'samples':
-                name = f'smpc{FLAGS.mpc_n}_{pref}{k}_commit{c}'
-            else:
-                name = f'mpc{FLAGS.mpc_n}_s{FLAGS.mpc_sigma:g}_{pref}{k}_commit{c}'
-            variant_specs[name] = (k, c)
-            counters[name] = TransitionCounter()
-            methods[name] = PolicyMPC(
-                wm, prior, mpc_policy, counters[name],
-                n_samples=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, horizon=k,
-                replan_every=c, score_agg=FLAGS.score_agg, seed=FLAGS.random_seed,
-                candidates=FLAGS.mpc_candidates, critic_fn=critic_fn,
-            )
-            requested.append(name)
-            branches[name] = FLAGS.mpc_n
+        # --mpc_n and --mpc_sigma accept comma lists, so one run can sweep the
+        # candidate count and the perturbation scale over the same episodes.
+        n_list = [int(x) for x in str(FLAGS.mpc_n).split(',')]
+        sigma_list = [float(x) for x in str(FLAGS.mpc_sigma).split(',')]
+        for n_samples in n_list:
+            for sigma in sigma_list:
+                for k, c in mpc_cells:
+                    pref = 'critic' if critic_fn is not None else 'score'  # which value scores the candidates
+                    if FLAGS.mpc_candidates == 'samples':
+                        name = f'smpc{n_samples}_{pref}{k}_commit{c}'
+                    else:
+                        name = f'mpc{n_samples}_s{sigma:g}_{pref}{k}_commit{c}'
+                    assert name not in methods, name
+                    variant_specs[name] = (k, c)
+                    counters[name] = TransitionCounter()
+                    methods[name] = PolicyMPC(
+                        wm, prior, mpc_policy, counters[name],
+                        n_samples=n_samples, sigma=sigma, horizon=k,
+                        replan_every=c, score_agg=FLAGS.score_agg, seed=FLAGS.random_seed,
+                        candidates=FLAGS.mpc_candidates, critic_fn=critic_fn,
+                    )
+                    requested.append(name)
+                    branches[name] = n_samples
     if FLAGS.noisy_sigma:
         noisy_policy = FLAGS.mpc_policy or FLAGS.best_fixed
         for sg in (float(x) for x in FLAGS.noisy_sigma.split(',')):
@@ -566,10 +574,11 @@ def main(_):
             )
             for name in requested
         },
-        random_seed=FLAGS.random_seed if (FLAGS.random_commit or FLAGS.mpc_n) else None,
-        mpc=(dict(n=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, policy=FLAGS.mpc_policy or FLAGS.best_fixed,
-                  candidates=FLAGS.mpc_candidates)
-             if FLAGS.mpc_n else None),
+        random_seed=FLAGS.random_seed if (FLAGS.random_commit or FLAGS.mpc_n != '0') else None,
+        mpc=(dict(n=[int(x) for x in str(FLAGS.mpc_n).split(',')],
+                  sigma=[float(x) for x in str(FLAGS.mpc_sigma).split(',')],
+                  policy=FLAGS.mpc_policy or FLAGS.best_fixed, candidates=FLAGS.mpc_candidates)
+             if FLAGS.mpc_n != '0' else None),
         extra_policies=extra,
         # Compute overhead: mean wall-clock per action, per method. Fixed
         # policies are the baseline; the planner surplus is the WM overhead.
