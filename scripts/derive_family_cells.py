@@ -1,7 +1,7 @@
 """Derive the per-family commitment interval from the held-out episodes.
 
 The paper tunes exactly one quantity per task family: the interval k=c, used by
-WMPP as its imagination horizon and commitment and by Random-Switch as its
+WMPA as its imagination horizon and commitment and by Random-Switch as its
 re-draw interval (the two are always matched -- see report_og50 --family_c).
 
 It is selected on the held-out episodes 50-99 (tag og50val), never on the test
@@ -27,7 +27,7 @@ SEEDS = [0, 1, 2]
 FAMILIES = [
     ('maze', ['pointmaze-medium-navigate-v0', 'antmaze-large-navigate-v0']),
     ('cube', ['cube-single-play-v0', 'cube-single-noisy-v0', 'cube-double-play-v0', 'cube-double-noisy-v0',
-              'cube-triple-play-v0', 'cube-triple-noisy-v0', 'cube-quadruple-play-v0', 'cube-quadruple-noisy-v0']),
+              'cube-triple-play-v0', 'cube-triple-noisy-v0']),
     ('scene', ['scene-play-v0', 'scene-noisy-v0']),
     ('puzzle', ['puzzle-3x3-play-v0', 'puzzle-3x3-noisy-v0', 'puzzle-4x4-play-v0', 'puzzle-4x4-noisy-v0',
                 'puzzle-4x5-play-v0', 'puzzle-4x5-noisy-v0', 'puzzle-4x6-play-v0', 'puzzle-4x6-noisy-v0']),

@@ -95,26 +95,17 @@ flags.DEFINE_string('noisy_sigma', None, 'Comma-separated sigmas of the NoisyPol
 flags.DEFINE_string('noisy_every', '1', 'Comma-separated perturbation intervals c of the NoisyPolicy control.')
 flags.DEFINE_integer('pmpc_n_per', 0, 'Portfolio-MPC: candidates per bank policy incl. its mean (0 = off); uses mpc_sigma and the mpc_k/mpc_commit/mpc_kc cells.')
 flags.DEFINE_string('mpc_kc', None, 'Comma-separated diagonal MPC cells k=c (in addition to the mpc_k x mpc_commit product; "" to skip the product).')
-# Scheduled exploration on top of WMPP: every requested WMPP variant is run
+# Scheduled exploration on top of WMPA: every requested WMPA variant is run
 # with the least-used policy forced at the first replan >= m env steps after
 # the last exploration (variant name <v>_explore<m>); the plain variants are
 # NOT re-run when this flag is set (they exist in the og50 dirs).
 flags.DEFINE_string('explore_every', None, 'Comma-separated exploration intervals m (env steps).')
 flags.DEFINE_string('least_used_commit', None, 'Comma-separated commit intervals for the LeastUsed (round-robin) control.')
 flags.DEFINE_string('least_used_order', 'name', 'Comma-separated cycle orders for LeastUsed: name, reverse, shuffle (variant suffix _<order> unless name).')
-# Distilled students (distill/students.py run dirs) evaluated on the same
-# paired episodes as everything else: name=run_dir:epoch[:decode], comma list.
-# A student may also serve as the MPC prior (--mpc_policy=<name>), with
-# --mpc_candidates=samples drawing the MPC candidates from the student's own
-# action distribution (variant smpc<N>_score<k>_commit<c>).
-flags.DEFINE_string('extra_policy', None, 'Comma-separated name=run_dir:epoch[:decode] student policies.')
-flags.DEFINE_string('classifier', None, 'Comma-separated name=run_dir:epoch:commit learned-arbiter classifiers (distill.arbiter.ClassifierArbiter over the bank).')
-flags.DEFINE_enum('mpc_candidates', 'gauss', ['gauss', 'samples'],
-                  'PolicyMPC candidate source: Gaussian perturbations of the prior mean, or the prior policy\'s own samples.')
 # Review-driven ablations / controls (all on the same paired episodes).
 flags.DEFINE_enum('ens_agg', 'mean', ['mean', 'min', 'lcb'], 'Ensemble reduction of the value scores in every WM planner (paper: mean).')
-flags.DEFINE_string('abl_agg', None, 'Comma-separated horizon aggregations (last,mean) to ADD as variants <v>_agg<x> of every requested WMPP variant.')
-flags.DEFINE_string('abl_ens', None, 'Comma-separated ensemble reductions (min,lcb) to ADD as variants <v>_ens<x> of every requested WMPP variant.')
+flags.DEFINE_string('abl_agg', None, 'Comma-separated horizon aggregations (last,mean) to ADD as variants <v>_agg<x> of every requested WMPA variant.')
+flags.DEFINE_string('abl_ens', None, 'Comma-separated ensemble reductions (min,lcb) to ADD as variants <v>_ens<x> of every requested WMPA variant.')
 flags.DEFINE_bool('abl_only', False, 'With --abl_agg/--abl_ens: do not run the plain requested variants themselves (they exist elsewhere).')
 flags.DEFINE_string('stall_window', None, 'Comma-separated windows m of the no-model stall-restart controller (variant stall_w<m>).')
 flags.DEFINE_float('stall_eps', 0.05, 'Stall threshold: normalised displacement over the window below which the policy is restarted.')
@@ -127,7 +118,7 @@ flags.DEFINE_string('episode_range', None, 'START:END — evaluate only these ep
                     'the official test set is 0:50, a validation split uses fresh indices such as 50:100.')
 flags.DEFINE_integer('flush_every', 0, 'Rewrite episodes.csv every N episodes (0 = only at the end).')
 flags.DEFINE_bool('dump_decisions', False, 'Record (t, obs, goal, scores, winner) at every arbitration of the plain '
-                  'WMPP cells and RandomArbiter controls; written as decisions_<variant>.npz next to episodes.csv.')
+                  'WMPA cells and RandomArbiter controls; written as decisions_<variant>.npz next to episodes.csv.')
 flags.DEFINE_string('bank_extra', None, 'Comma list of <env_name>:<policy_root>[:<suffix>] — policies trained on another '
                     'dataset of the same env pooled into the bank as <algo>-<suffix>-sd<seed> (cross-dataset bank).')
 flags.DEFINE_string('sim_oracle_commit', None, 'Comma list of c: dynamic simulator oracle sim_oracle_commit<c> '
@@ -237,18 +228,6 @@ def main(_):
         requested = FLAGS.variants.split(',') if FLAGS.variants else list(variant_specs)
     counters = {}
     methods = dict(bank)
-    extra = {}
-    if FLAGS.extra_policy:
-        from distill.students import load_student  # optional, local-only module
-        for item in FLAGS.extra_policy.split(','):
-            name, spec = item.split('=', 1)
-            parts = spec.split(':')
-            run_dir, epoch = parts[0], (int(parts[1]) if parts[1].isdigit() else parts[1])  # e.g. 'best'
-            decode = parts[2] if len(parts) > 2 else None
-            assert name not in bank, f'extra policy name {name} collides with a bank policy'
-            extra[name] = dict(run_dir=run_dir, epoch=epoch, decode=decode)
-            methods[name] = load_student(run_dir, epoch, decode=decode)
-            extra[name]['student'] = dict(methods[name].config)
     explore = [int(x) for x in FLAGS.explore_every.split(',')] if FLAGS.explore_every else [None]
     plain = list(requested)
     requested = []
@@ -331,21 +310,6 @@ def main(_):
             methods[name] = CriticSelectArbiter(bank, bank[critic_name].q_min, c, seed=FLAGS.random_seed)
             requested.append(name)
 
-    if FLAGS.classifier:
-        from distill.arbiter import ClassifierArbiter  # optional, local-only module
-        from distill.students import load_student
-        for item in FLAGS.classifier.split(','):
-            name, spec = item.split('=', 1)
-            run_dir, epoch_s, commit_s = spec.split(':')
-            epoch = int(epoch_s) if epoch_s.isdigit() else epoch_s
-            c = int(commit_s)
-            assert name not in bank and name not in methods, name
-            clf = load_student(run_dir, epoch)
-            methods[name] = ClassifierArbiter(clf, bank, commit=c, seed=FLAGS.random_seed)
-            extra[name] = dict(run_dir=run_dir, epoch=epoch, commit=c, student=dict(clf.config))
-            variant_specs[name] = (0, c)
-            counters[name] = TransitionCounter()
-            requested.append(name)
     if FLAGS.stall_window:
         # No-model restart heuristic: switch when the normalised state stalls.
         for m in (int(x) for x in FLAGS.stall_window.split(',')):
@@ -375,9 +339,6 @@ def main(_):
                 requested.append(name)
     # Nominal branch count per variant (P for bank planners, N for MPC).
     branches = {name: len(bank) for name in requested}
-    if FLAGS.classifier:
-        extra_names = [x.split('=', 1)[0] for x in FLAGS.classifier.split(',')]
-        branches.update({n: len(bank) for n in extra_names})
     mpc_cells = [(k, c) for k in (int(x) for x in FLAGS.mpc_k.split(',') if x)
                  for c in (int(x) for x in FLAGS.mpc_commit.split(',') if x)]
     if FLAGS.mpc_kc:
@@ -394,21 +355,18 @@ def main(_):
             branches[name] = FLAGS.pmpc_n_per * len(bank)
     if FLAGS.mpc_n:
         mpc_policy = FLAGS.mpc_policy or FLAGS.best_fixed
-        assert mpc_policy in bank or mpc_policy in extra, (mpc_policy, sorted(bank), sorted(extra))
-        prior = bank[mpc_policy] if mpc_policy in bank else methods[mpc_policy]
+        assert mpc_policy in bank, (mpc_policy, sorted(bank))
+        prior = bank[mpc_policy]
         for k, c in mpc_cells:
             pref = 'critic' if critic_fn is not None else 'score'  # which value scores the candidates
-            if FLAGS.mpc_candidates == 'samples':
-                name = f'smpc{FLAGS.mpc_n}_{pref}{k}_commit{c}'
-            else:
-                name = f'mpc{FLAGS.mpc_n}_s{FLAGS.mpc_sigma:g}_{pref}{k}_commit{c}'
+            name = f'mpc{FLAGS.mpc_n}_s{FLAGS.mpc_sigma:g}_{pref}{k}_commit{c}'
             variant_specs[name] = (k, c)
             counters[name] = TransitionCounter()
             methods[name] = PolicyMPC(
                 wm, prior, mpc_policy, counters[name],
                 n_samples=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, horizon=k,
                 replan_every=c, score_agg=FLAGS.score_agg, seed=FLAGS.random_seed,
-                candidates=FLAGS.mpc_candidates, critic_fn=critic_fn,
+                critic_fn=critic_fn,
             )
             requested.append(name)
             branches[name] = FLAGS.mpc_n
@@ -558,10 +516,8 @@ def main(_):
             for name in requested
         },
         random_seed=FLAGS.random_seed if (FLAGS.random_commit or FLAGS.mpc_n) else None,
-        mpc=(dict(n=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, policy=FLAGS.mpc_policy or FLAGS.best_fixed,
-                  candidates=FLAGS.mpc_candidates)
+        mpc=(dict(n=FLAGS.mpc_n, sigma=FLAGS.mpc_sigma, policy=FLAGS.mpc_policy or FLAGS.best_fixed)
              if FLAGS.mpc_n else None),
-        extra_policies=extra,
         # Compute overhead: mean wall-clock per action, per method. Fixed
         # policies are the baseline; the planner surplus is the WM overhead.
         act_ms_per_step={

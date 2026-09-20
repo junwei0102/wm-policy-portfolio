@@ -8,10 +8,10 @@ algorithms (GCBC, GCIVL, GCIQL, QRL, CRL, HIQL; three seeds each) on the *same*
 dataset, form a bank. Every `c` environment steps WMPA rolls each policy forward
 `k` steps in a learned state-space world model, scores the imagined futures with
 one shared goal-conditioned value function, and executes the highest-scoring
-policy until the next arbitration. No policy is retrained. On 20 state-based
+policy until the next arbitration. No policy is retrained. On 18 state-based
 OGBench datasets (maze, cube, scene, puzzle) the macro-average success rate
-rises from 40% (best policy in the bank) to 52%, with significant gains on 12
-datasets; random switching at the same interval reaches 35%.
+rises from 44% (best policy in the bank) to 58%, with significant gains on 12
+datasets; random switching at the same interval reaches 39%.
 
 ## Method
 
@@ -69,12 +69,18 @@ datasets are not included; every script takes its paths as flags
    --env_name=... --wm_dir=... --policy_root=... --seeds=0 --best_fixed=gciql-sd0
    --score_mode=value --score_agg=max --horizon=10 --commit=10
    --episodes_per_task=50 --out_tag=og50`. `--critic_scorer=gciql --critic_kc=10`
-   scores with the direct value; `--random_commit`, `--critic_select_commit`, and
-   `--mpc_n` run the controls; `--episode_range=50:100` evaluates the held-out
-   episodes used for interval selection (`scripts/derive_family_cells.py`).
-4. **Report**: `scripts/report_og50.py --fixed_tag=og50fx` aggregates per-dataset
-   success and paired contrasts. `scripts/collect_oracle.py` and
-   `scripts/run_wm_diagnostics.py` produce the real-simulator branch diagnostics.
+   scores with the direct value; `--random_commit` and `--critic_select_commit`
+   run the random and Q-select controls, `--mpc_n=6 --mpc_sigma=0.2 --mpc_k=<k>
+   --mpc_commit=1` the every-step action-level MPC; `--episode_range=50:100`
+   evaluates the held-out episodes used for interval selection.
+4. **Report**: `scripts/derive_family_cells.py` picks the per-family interval on
+   the held-out episodes and prints the matching flags; `scripts/report_og50.py
+   --fixed_tag=og50fx --select_rule=family
+   --family_k=maze:1,cube:5,scene:10,puzzle:10
+   --family_c=maze:1,cube:5,scene:10,puzzle:10 --family_scorer=puzzle:critic`
+   aggregates per-dataset success and paired contrasts.
+   `scripts/collect_oracle.py` and `scripts/run_wm_diagnostics.py` produce the
+   real-simulator branch diagnostics.
 
 ## Statistics
 

@@ -10,7 +10,7 @@ OGBench eval.csv recorded in manifests/wmpp_env_config.json (unpaired offset).
 Per env it reports:
   * the full diagonal (k,k) sweep and the re-selected best cell (ties ->
     smallest k);
-  * WMPP (selected k=c), One-Step (1,1) and Random (same c) absolute success,
+  * WMPA (selected k=c), One-Step (1,1) and Random (same c) absolute success,
     delta vs the best policy family over 3 seeds (eval.csv mean, treated as
     the reported baseline value; CI from hierarchical bootstrap of the
     method's episodes) and paired method-vs-method contrasts;
@@ -51,7 +51,7 @@ flags.DEFINE_string('out', None, 'Output prefix (default: <eval_root>/og50_repor
 flags.DEFINE_bool('onestep_as_cell', False, 'Treat (1,1) as one more k=c cell of the hyperparameter sweep '
                   '(selected like any other); drop the separate One-Step control and report Random only.')
 flags.DEFINE_string('family_scorer', '', 'Per-family rollout scorer, e.g. "puzzle:critic": families listed use the '
-                    'critic{k}_commit{k} variants (a bank member\'s own V, eval_planner --critic_scorer) as WMPP; '
+                    'critic{k}_commit{k} variants (a bank member\'s own V, eval_planner --critic_scorer) as WMPA; '
                     'all other families use the LAVL head (score{k}_commit{k}). The critic rows must be merged '
                     'via --extra_tags (e.g. og50cr).')
 flags.DEFINE_string('extra_tags', '', 'Comma-separated extra dir tags whose variants are merged into the main '
@@ -60,11 +60,11 @@ flags.DEFINE_enum('select_rule', 'test', ['test', 'loo_family', 'global', 'valid
                   'How the reported k=c cell is chosen: test = best mean on this dataset (paper); loo_family = the k with the best '
                   'mean over the OTHER datasets of the same family (leave-one-dataset-out); global = the k with the best macro-average '
                   'over all other datasets. The two leakage-free rules never look at the dataset being reported.')
-flags.DEFINE_string('family_k', 'cube:5,scene:5,maze:1,puzzle:50', 'family:k list for --select_rule=family (WMPP k=c per task family; '
+flags.DEFINE_string('family_k', 'maze:1,cube:5,scene:10,puzzle:10', 'family:k list for --select_rule=family (WMPA k=c per task family; '
                     'values chosen on the validation episodes 50..99, never on the reported ones).')
-flags.DEFINE_string('family_c', 'cube:5,scene:5,maze:5,puzzle:1', 'family:c list for --select_rule=family (Random-Switch interval per family).')
+flags.DEFINE_string('family_c', 'maze:1,cube:5,scene:10,puzzle:10', 'family:c list for --select_rule=family (Random-Switch interval per family).')
 flags.DEFINE_string('val_tag', 'og50val', 'Dir tag of the validation sweep (episodes 50..99) used by --select_rule=validation: '
-                    'k* = best mean WMPP diagonal cell and c* = best mean Random interval, both chosen there and never on the '
+                    'k* = best mean WMPA diagonal cell and c* = best mean Random interval, both chosen there and never on the '
                     'reported episodes.')
 flags.DEFINE_string('selected_cells_out', os.path.join(ROOT, 'manifests', 'selected_cells.json'),
                     'Where --select_rule=validation writes {env: {k, c, ...}} for downstream launchers.')
@@ -169,7 +169,7 @@ def load_validation(env_dir, seed, tag):
 
 def validation_selection(envs, seeds, tag):
     """(k*, c*) per env from the validation sweep: argmax of the 3-seed mean over the diagonal
-    WMPP cells and, independently, over the Random intervals (ties -> smallest k / c)."""
+    WMPA cells and, independently, over the Random intervals (ties -> smallest k / c)."""
     out = {}
     for e in envs:
         env_dir = os.path.join(FLAGS.eval_root, e)
@@ -230,7 +230,7 @@ def report_env(env, seeds, tag, n_boot, envcfg, abl_fixed_ms, force_k=None, forc
     assert roles['Random'] in spec, (env, roles)
     has_os = 'OneStep' in roles
     # Sampling-MPC baseline (single fixed policy as prior; world-model search
-    # without a portfolio), reported at the WMPP-selected k when available.
+    # without a portfolio), reported at the WMPA-selected k when available.
     mpc_vs = sorted(v for v in spec if v.startswith('mpc') and spec[v]['imagine'] == k)
     if mpc_vs:
         roles['MPC'] = mpc_vs[0]
@@ -339,7 +339,7 @@ def markdown(reports):
     L = []
     os_ = not FLAGS.onestep_as_cell
     labs = ('WMPP', 'OneStep', 'Random') if os_ else ('WMPP', 'Random')
-    L.append('## Official-protocol results (5 tasks x 50 episodes per bank seed): WMPP vs One-Step vs Random\n')
+    L.append('## Official-protocol results (5 tasks x 50 episodes per bank seed): WMPA vs One-Step vs Random\n')
     if FLAGS.fixed_tag:
         L.append(f'Baselines: every bank policy re-evaluated under the official protocol on the planners\' episode seeds (tag {FLAGS.fixed_tag}). '
                  'Best policy = family with the highest 3-seed mean; every Δ is a paired per-episode contrast with a hierarchical bootstrap '
@@ -349,10 +349,10 @@ def markdown(reports):
                  'Best policy = family with the highest 3-seed mean; Δ vs it treats the eval.csv value as the reported baseline, '
                  'CI from hierarchical bootstrap of the method\'s 750 episodes. Method-vs-method contrasts are paired per episode. * = CI excludes 0.\n')
     if os_:
-        L.append('| env | k=c | best policy | test | WMPP | OneStep | Random | ΔWMPP | ΔOneStep | ΔRandom | WMPP−OneStep | WMPP−Random |')
+        L.append('| env | k=c | best policy | test | WMPA | OneStep | Random | ΔWMPA | ΔOneStep | ΔRandom | WMPA−OneStep | WMPA−Random |')
         L.append('|---|---|---|---|---|---|---|---|---|---|---|---|')
     else:
-        L.append('| env | k=c | best policy | test | WMPP | Random | ΔWMPP | ΔRandom | WMPP−Random |')
+        L.append('| env | k=c | best policy | test | WMPA | Random | ΔWMPA | ΔRandom | WMPA−Random |')
         L.append('|---|---|---|---|---|---|---|---|---|')
     for r in reports:
         m, c = r['methods'], r['contrasts']
@@ -370,7 +370,7 @@ def markdown(reports):
     if mpc_reports:
         L.append('\n### Sampling-MPC baseline (best fixed policy as action prior; N candidates = policy mean + N−1 Gaussian perturbations, '
                  'value-head scored, first action executed)\n')
-        L.append('| env | MPC variant (N, σ, k, c) | prior policy | best policy | test | MPC | WMPP | ΔMPC vs best | WMPP−MPC |')
+        L.append('| env | MPC variant (N, σ, k, c) | prior policy | best policy | test | MPC | WMPA | ΔMPC vs best | WMPA−MPC |')
         L.append('|---|---|---|---|---|---|---|---|---|')
         for r in mpc_reports:
             m, c = r['methods'], r['contrasts']

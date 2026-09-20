@@ -1,4 +1,4 @@
-"""Oracle-dynamics WMPP: the RolloutRanker arbitration with the k-step branches
+"""Oracle-dynamics WMPA: the RolloutRanker arbitration with the k-step branches
 executed in the REAL simulator instead of the learned world model.
 
 At every arbitration boundary the live env is snapshotted (interfaces.sim_branch.
@@ -6,7 +6,7 @@ SimBranch, bit-exact within one reset), every bank policy is rolled out k steps
 from that state in the simulator, the visited real states are scored with the
 SAME value head / ensemble reduction / horizon aggregation as RolloutRanker, and
 the env is restored before the chosen policy acts. This isolates what the
-learned dynamics cost: WMPP - SimWMPP = model-induced ranking loss; SimWMPP -
+learned dynamics cost: WMPA - SimWMPA = model-induced ranking loss; SimWMPA -
 best policy = what the value head + switching logic deliver with perfect
 dynamics. The transition counter records SIMULATOR steps (P*k per decision).
 """

@@ -197,7 +197,7 @@ class RolloutRanker:
         # Scheduled exploration: at a replan boundary reached >= explore_every
         # env steps after the last exploration, commit to the LEAST-USED policy
         # of the episode (ties among least-used broken by the model score)
-        # instead of the argmax. None = plain WMPP.
+        # instead of the argmax. None = plain WMPA.
         self.explore_every = int(explore_every) if explore_every else None
         # Horizon aggregation of the per-step (H, P) score matrix:
         #   max  — best state visited within k (optimistic; default)
@@ -311,7 +311,7 @@ class RolloutRanker:
 
 
 class RandomArbiter:
-    """Random-arbitration control: same commitment schedule as WMPP, no model.
+    """Random-arbitration control: same commitment schedule as WMPA, no model.
 
     At every arbitration boundary (every `commit` real env steps, starting at
     the first step of the episode) a policy is drawn UNIFORMLY from the full
@@ -388,7 +388,7 @@ class CriticSelectArbiter:
     the CURRENT state, one critic scores them, i* = argmax_i q_fn(s, a_i, g),
     and pi_{i*} runs closed-loop for `commit` steps. With GCIQL's twin heads
     q_fn = min_j Q_j (FrozenPolicy.q_min) this is the zero-rollout counterpart
-    of the direct-value WMPP cell: same critic family, same candidates, same
+    of the direct-value WMPA cell: same critic family, same candidates, same
     commitment, no dynamics model. Dynamics-call count is exactly zero; value
     calls are P per decision.
     """
@@ -470,9 +470,8 @@ class PolicyMPC:
         # candidates='gauss': candidate 0 = policy mean, others = clip(mu + sigma*eps).
         # candidates='samples': the policy proposes its own candidates via
         # policy.sample_candidates(ob, goal, n, rng) (candidate 0 = its
-        # deterministic decode, others = draws from its action distribution;
-        # used for a distributional student, see distill/students.py). Scoring,
-        # commit and budget are identical in both modes.
+        # deterministic decode, others = draws from its action distribution).
+        # Scoring, commit and budget are identical in both modes.
         assert candidates in ('gauss', 'samples'), candidates
         if candidates == 'samples':
             assert hasattr(policy, 'sample_candidates'), 'policy must implement sample_candidates(ob, goal, n, rng)'
