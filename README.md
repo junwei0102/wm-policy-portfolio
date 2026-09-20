@@ -8,10 +8,10 @@ algorithms (GCBC, GCIVL, GCIQL, QRL, CRL, HIQL; three seeds each) on the *same*
 dataset, form a bank. Every `c` environment steps WMPA rolls each policy forward
 `k` steps in a learned state-space world model, scores the imagined futures with
 one shared goal-conditioned value function, and executes the highest-scoring
-policy until the next arbitration. No policy is retrained. On 20 state-based
+policy until the next arbitration. No policy is retrained. On 18 state-based
 OGBench datasets (maze, cube, scene, puzzle) the macro-average success rate
-rises from 40% (best policy in the bank) to 52%, with significant gains on 12
-datasets; random switching at the same interval reaches 35%.
+rises from 44% (best policy in the bank) to 58%, with significant gains on 12
+datasets; random switching at the same interval reaches 39%.
 
 ## Method
 
