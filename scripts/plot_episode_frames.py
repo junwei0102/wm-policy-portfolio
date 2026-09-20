@@ -56,14 +56,18 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, Rectangle
-plt.rcParams.update({'font.size': 7, 'axes.titlesize': 7.5, 'pdf.fonttype': 42, 'font.family': 'serif',
+# ---- font sizes and layout (points); tweak here ----
+FS_PICK, FS_NOTE, FS_BAND, FS_XLABEL = 7.8, 7.5, 7.0, 0   # pick badge, note under frame, policy name in band, band caption
+FIGSIZE, BAND_RATIO = (5.5, 2.3), 0.17                     # figure size (in); band height relative to the frame row
+PICK_WORD = 'WMPA picks'                                    # badge text under each arbitration frame
+plt.rcParams.update({'font.size': 8, 'axes.titlesize': 8.5, 'pdf.fonttype': 42, 'font.family': 'serif',
                      'font.serif': ['Times New Roman', 'Times', 'Nimbus Roman', 'Liberation Serif', 'STIXGeneral'],
                      'mathtext.fontset': 'stix'})
 out = args.out or os.path.join(ROOT, 'WMPP_ICLR2027', 'figures', f'episode_frames_{args.env.replace("-v0", "").replace("-", "_")}')
 
 n = len(show)
-fig = plt.figure(figsize=(5.5, 2.3))
-gs = fig.add_gridspec(2, n, height_ratios=[1.0, 0.16], hspace=0.55, wspace=0.06, left=0.005, right=0.995, top=0.995, bottom=0.10)
+fig = plt.figure(figsize=FIGSIZE)
+gs = fig.add_gridspec(2, n, height_ratios=[1.0, BAND_RATIO], hspace=0.60, wspace=0.06, left=0.005, right=0.995, top=0.995, bottom=0.02)
 axes = [fig.add_subplot(gs[0, i]) for i in range(n)]
 for i, (ax, t) in enumerate(zip(axes, show)):
     j = int(np.flatnonzero(t_all == t)[0])
@@ -76,13 +80,13 @@ for i, (ax, t) in enumerate(zip(axes, show)):
     p = int(pick_all[j])
     if p >= 0:
         s_ = sc_by_t[t]; srt = np.sort(s_); lead = srt[-1] - srt[-2]
-        ax.text(0.5, -0.05, f'WM picks {LABEL[fam[p]]}', transform=ax.transAxes, ha='center', va='top', fontsize=7.2, color=INK,
+        ax.text(0.5, -0.05, f'{PICK_WORD} {LABEL[fam[p]]}', transform=ax.transAxes, ha='center', va='top', fontsize=FS_PICK, color=INK,
                 fontweight='bold', bbox=dict(boxstyle='round,pad=0.3', facecolor=COL[fam[p]], edgecolor=EDGE.get(fam[p], INK2), lw=0.6))
     else:
-        ax.text(0.5, -0.05, 'success', transform=ax.transAxes, ha='center', va='top', fontsize=7.2, color=INK, fontweight='bold',
+        ax.text(0.5, -0.05, 'success', transform=ax.transAxes, ha='center', va='top', fontsize=FS_PICK, color=INK, fontweight='bold',
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor=INK2, lw=0.6))
     note = notes[i] or (f'{placed}/{NCUBE} cube{"s" if NCUBE > 1 else ""} placed' + (', holding' if obs_all[j, 18] > 0.5 else ''))
-    ax.text(0.5, -0.25, note.replace('\\n', '\n'), transform=ax.transAxes, ha='center', va='top', fontsize=5.4, color=INK2, linespacing=1.1)
+    ax.text(0.5, -0.27, note.replace('\\n', '\n'), transform=ax.transAxes, ha='center', va='top', fontsize=FS_NOTE, color=INK2, linespacing=1.1)
     if i < n - 1:
         fig.patches.append(FancyArrowPatch((0.985, 0.5), (1.06, 0.5), transform=ax.transAxes, arrowstyle='-|>', mutation_scale=7,
                                            color=INK2, lw=0.7, clip_on=False))
@@ -91,11 +95,13 @@ axb = fig.add_subplot(gs[1, :])
 for j, (t, p) in enumerate(zip(t_all[:-1], pick_all[:-1])):
     t1 = t_all[j + 1]
     axb.add_patch(Rectangle((t, 0), t1 - t, 1, facecolor=COL[fam[p]], edgecolor=EDGE.get(fam[p], INK2), lw=0.5))
-    if (j == 0 or pick_all[j - 1] != p) and t1 - t >= 7:
-        axb.text(t + 0.7, 0.5, LABEL[fam[p]], fontsize=5.2, color=INK, va='center', ha='left')
+    if t1 - t >= 5:  # every block carries its policy name, centered (blocks narrower than 5 steps stay unlabeled)
+        axb.text((t + t1) / 2, 0.5, LABEL[fam[p]], fontsize=FS_BAND, color=INK, va='center', ha='center')
 axb.set_xlim(0, steps); axb.set_ylim(0, 1); axb.set_yticks([])
 axb.set_xticks([])
-axb.set_xlabel('policy executed over the episode (one block per arbitration)', fontsize=6.2, labelpad=2)
+BAND_CAPTION = ''  # caption under the band; '' = none (was 'policy executed over the episode (one block per arbitration)')
+if BAND_CAPTION:
+    axb.set_xlabel(BAND_CAPTION, fontsize=FS_XLABEL, labelpad=2)
 for s in axb.spines.values():
     s.set_visible(False)
 fig.savefig(out + '.png', dpi=300, bbox_inches='tight', pad_inches=0.02); fig.savefig(out + '.pdf', bbox_inches='tight', dpi=300, pad_inches=0.02)
