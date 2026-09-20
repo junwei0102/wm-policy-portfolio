@@ -60,9 +60,9 @@ flags.DEFINE_enum('select_rule', 'test', ['test', 'loo_family', 'global', 'valid
                   'How the reported k=c cell is chosen: test = best mean on this dataset (paper); loo_family = the k with the best '
                   'mean over the OTHER datasets of the same family (leave-one-dataset-out); global = the k with the best macro-average '
                   'over all other datasets. The two leakage-free rules never look at the dataset being reported.')
-flags.DEFINE_string('family_k', 'cube:5,scene:5,maze:1,puzzle:50', 'family:k list for --select_rule=family (WMPP k=c per task family; '
+flags.DEFINE_string('family_k', 'maze:1,cube:5,scene:10,puzzle:10', 'family:k list for --select_rule=family (WMPP k=c per task family; '
                     'values chosen on the validation episodes 50..99, never on the reported ones).')
-flags.DEFINE_string('family_c', 'cube:5,scene:5,maze:5,puzzle:1', 'family:c list for --select_rule=family (Random-Switch interval per family).')
+flags.DEFINE_string('family_c', 'maze:1,cube:5,scene:10,puzzle:10', 'family:c list for --select_rule=family (Random-Switch interval per family).')
 flags.DEFINE_string('val_tag', 'og50val', 'Dir tag of the validation sweep (episodes 50..99) used by --select_rule=validation: '
                     'k* = best mean WMPP diagonal cell and c* = best mean Random interval, both chosen there and never on the '
                     'reported episodes.')
