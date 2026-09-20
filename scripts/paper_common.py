@@ -13,7 +13,7 @@ ALGOS = ['gcbc', 'gcivl', 'gciql', 'qrl', 'crl', 'hiql']
 FAMILIES = [
     ('Maze', ['pointmaze-medium-navigate-v0', 'antmaze-large-navigate-v0']),
     ('Cube', ['cube-single-play-v0', 'cube-single-noisy-v0', 'cube-double-play-v0', 'cube-double-noisy-v0',
-              'cube-triple-play-v0', 'cube-triple-noisy-v0', 'cube-quadruple-play-v0', 'cube-quadruple-noisy-v0']),
+              'cube-triple-play-v0', 'cube-triple-noisy-v0']),  # cube-quadruple-{play,noisy} dropped from the paper (2026-09-16): every method at 0
     ('Scene', ['scene-play-v0', 'scene-noisy-v0']),
     ('Puzzle', ['puzzle-3x3-play-v0', 'puzzle-3x3-noisy-v0', 'puzzle-4x4-play-v0', 'puzzle-4x4-noisy-v0',
                 'puzzle-4x5-play-v0', 'puzzle-4x5-noisy-v0', 'puzzle-4x6-play-v0', 'puzzle-4x6-noisy-v0']),

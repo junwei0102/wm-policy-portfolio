@@ -28,6 +28,7 @@ Usage:
 """
 
 import csv
+import glob
 import json
 import os
 import sys
@@ -63,7 +64,7 @@ ALGOS = ['gcbc', 'gcivl', 'gciql', 'qrl', 'crl', 'hiql']
 FAMILIES = [
     ('Maze', ['pointmaze-medium-navigate-v0', 'antmaze-large-navigate-v0']),
     ('Cube', ['cube-single-play-v0', 'cube-single-noisy-v0', 'cube-double-play-v0', 'cube-double-noisy-v0',
-              'cube-triple-play-v0', 'cube-triple-noisy-v0', 'cube-quadruple-play-v0', 'cube-quadruple-noisy-v0']),
+              'cube-triple-play-v0', 'cube-triple-noisy-v0']),  # cube-quadruple-{play,noisy} dropped from the paper (2026-09-16): every method at 0
     ('Scene', ['scene-play-v0', 'scene-noisy-v0']),
     ('Puzzle', ['puzzle-3x3-play-v0', 'puzzle-3x3-noisy-v0', 'puzzle-4x4-play-v0', 'puzzle-4x4-noisy-v0',
                 'puzzle-4x5-play-v0', 'puzzle-4x5-noisy-v0', 'puzzle-4x6-play-v0', 'puzzle-4x6-noisy-v0']),
@@ -440,6 +441,7 @@ def main(_):
             u_half = half_width({sd: np.array(list(ue.values())) for sd, ue in o['union_by_ep'].items()})
         # Bold rule (decided 2026-09-12): OGBench convention over the three success columns
         # B_max, U (hindsight oracle), and WMPP -- every entry within 95% of their row maximum.
+        s['u_half'] = u_half
         top = float(np.nanmax([s['bmax'], s['union'], s['wmpp']]))
         b_cell = fmt_pm_ci(s['bmax'], d['b_half'], bold=near_top(s['bmax'], top)) if d.get('b_half') is not None else fmt(s['bmax'], bold=near_top(s['bmax'], top))
         u_bold = (not np.isnan(s['union'])) and near_top(s['union'], top)
@@ -447,7 +449,9 @@ def main(_):
         rows.append(' & '.join([
             tex_env(env), b_cell, fmt(s['gap']),
             u_cell, fmt(head),
-            fmt_pm_ci(s['wmpp'], d['w_half'], bold=near_top(s['wmpp'], top)), fmt_ci(d['dW']), 'PADJ_' + env,
+            fmt_pm_ci(s['wmpp'], d['w_half'], bold=near_top(s['wmpp'], top)), fmt_ci(d['dW']),
+            # paired per-episode contrast WMPA - U (hierarchical bootstrap over bank seeds, then episodes)
+            fmt_ci(s['dU']) if 'dU' in s else '--', 'PADJ_' + env,
         ]) + ' \\\\')
     # Multiplicity: Holm (FWER) and Benjamini-Hochberg (FDR) over the per-dataset WMPP-vs-best and
     # WMPP-vs-Random bootstrap p-values (reviewer W10).
@@ -465,8 +469,8 @@ def main(_):
             adj[e].update(holm_rand=float(hr[i]), bh_rand=float(br[i]))
     rows = [r.replace(' & PADJ_' + e, '') for r, e in zip(rows, envs)]  # p_Holm column dropped from the table (counts stay in the text)
     with open(os.path.join(tdir, 'bank_stats.tex'), 'w') as f:
-        f.write('\\begin{tabular}{lccccc r}\n\\toprule\n'
-                'Dataset & $B_{\\max}$ & $D_{\\mathrm{gap}}$ & $U$ (oracle) & $U-B_{\\max}$ & \\wmpp & $\\Delta$\\wmpp{} [95\\% CI] \\\\\n\\midrule\n'
+        f.write('\\begin{tabular}{lccccc rr}\n\\toprule\n'
+                'Dataset & $B_{\\max}$ & $D_{\\mathrm{gap}}$ & $U$ (oracle) & $U-B_{\\max}$ & \\wmpp & $\\Delta$\\wmpp{} [95\\% CI] & \\wmpp$-U$ [95\\% CI] \\\\\n\\midrule\n'
                 + '\n'.join(rows) + '\n\\bottomrule\n\\end{tabular}\n')
 
     # ---- oracle panel (Fig. "when", panel b): every dataset, family order --------
@@ -533,10 +537,30 @@ def main(_):
         scorers = {R[e]['scorer'] for e in fenvs}
         assert len(scorers) == 1, f'{famname}: mixed scorers {scorers} (the value head is chosen per family)'
         head = {'lavl': 'metric', 'critic': 'direct'}[scorers.pop()]
+        if head == 'direct':
+            # The scorer is the bank's GCIQL state value: report ITS gamma/kappa (read from the
+            # member's training flags), not the metric head's; the smoothness term does not apply.
+            dcfgs = []
+            for e in fenvs:
+                for fp in sorted(glob.glob(os.path.join(envcfg[e]['policy_root'], '*', 'flags.json'))):
+                    try:
+                        fl = json.load(open(fp))
+                    except json.JSONDecodeError:
+                        continue
+                    if fl.get('env_name') == e and (fl.get('agent') or {}).get('agent_name') == 'gciql':
+                        dcfgs.append(fl['agent']); break
+            assert len(dcfgs) == len(fenvs), f'{famname}: GCIQL flags not found for every dataset'
+            def dstr(key, fmt):
+                return '/'.join(sorted({fmt(c[key]) for c in dcfgs if key in c}, reverse=True))
+            gamma_s = dstr('discount', lambda v: f'{v:.3f}'.rstrip('0').rstrip('.'))
+            kappa_s, smooth_s = dstr('expectile', lambda v: f'{v:.1f}'), '--'
+        else:
+            gamma_s = setstr('discount', lambda v: f'{v:.3f}'.rstrip('0').rstrip('.'))
+            kappa_s = setstr('lavl_expectile', lambda v: f'{v:.1f}')
+            smooth_s = setstr('lavl_smoothness_weight', lambda v: f'{v:g}')
         frows.append(' & '.join([
             famname, str(len(fenvs)), head, '/'.join(str(k) for k in ks),
-            setstr('horizon', lambda v: str(v)), setstr('discount', lambda v: f'{v:.3f}'.rstrip('0').rstrip('.')),
-            setstr('lavl_expectile', lambda v: f'{v:.1f}'), setstr('lavl_smoothness_weight', lambda v: f'{v:g}'),
+            setstr('horizon', lambda v: str(v)), gamma_s, kappa_s, smooth_s,
         ]) + ' \\\\')
     with open(os.path.join(tdir, 'settings_family.tex'), 'w') as f:
         f.write('\\begin{tabular}{lclccccc}\n\\toprule\n'
@@ -674,7 +698,7 @@ def main(_):
     plt.close(fig)
 
     # (2) regimes: gain vs complementarity headroom of the static oracle
-    fig, ax = plt.subplots(figsize=(3.4, 3.0))
+    fig, ax = plt.subplots(figsize=(5.5, 2.1))  # full text width, flat: placed with width=\linewidth
     xs = np.array([stats[e]['union'] - stats[e]['obest'] for e in envs])
     ys = np.array([stats[e]['dW'] for e in envs])
     ax.plot([0, max(xs.max(), ys.max()) + 2], [0, max(xs.max(), ys.max()) + 2], ls='--', lw=0.8, color='#9a9a9a')
@@ -683,17 +707,22 @@ def main(_):
         if idx:
             ax.scatter(xs[idx], ys[idx], s=22, color=C_FAMILY[fam], edgecolor='white', linewidth=0.6,
                        zorder=3, label=fam)
-    ax.legend(loc='lower right', fontsize=6, frameon=False, handletextpad=0.3, borderaxespad=0.4)
+    ax.legend(loc='center right', fontsize=6.5, frameon=False, handletextpad=0.3, borderaxespad=0.6, ncol=4, columnspacing=1.0)
     labels_on = {e for e in envs if abs(stats[e]['dW']) > 4 or (stats[e]['union'] - stats[e]['obest']) > 12}
+    # (dx pt, dy pt, ha): the crowded low-headroom cluster is labelled to the LEFT of the y axis
+    # (xlim starts at -6.5 to make room) so no label covers a marker or another label.
+    nudge = {'cube-double-play-v0': (3, -8, 'left'), 'cube-single-play-v0': (3, 3, 'left'),
+             'puzzle-3x3-play-v0': (-3, 3, 'right'), 'cube-triple-noisy-v0': (-3, -8, 'right'),
+             'puzzle-4x5-play-v0': (3, -5, 'left'), 'puzzle-4x6-play-v0': (3, 4, 'left')}
     for e in envs:
         if e in labels_on:
-            # Nudge labels that would otherwise collide with a neighbour.
-            xy_off = {'cube-double-play-v0': (3, -8), 'cube-single-play-v0': (3, -8)}.get(e, (3, 2))
+            dx, dy, ha = nudge.get(e, (3, 2, 'left'))
             ax.annotate(short(e).replace('-navigate', ''), (stats[e]['union'] - stats[e]['obest'], stats[e]['dW']),
-                        xytext=xy_off, textcoords='offset points', fontsize=6, color='#333')
+                        xytext=(dx, dy), textcoords='offset points', fontsize=6, color='#333', ha=ha)
+    ax.set_xlim(-6.5, max(xs.max(), ys.max()) + 2)
     ax.axhline(0, color='#555', lw=0.6)
-    ax.set_xlabel('Hindsight per-episode oracle minus best fixed policy (points)')
-    ax.set_ylabel('WMPA gain over best fixed policy (points)')
+    ax.set_xlabel('Oracle headroom over best policy (points)')
+    ax.set_ylabel('WMPA gain (points)')
     ax.grid(color='#e6e6e6', lw=0.6)
     ax.set_axisbelow(True)
     fig.tight_layout()
