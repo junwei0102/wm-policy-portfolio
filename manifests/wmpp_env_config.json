@@ -4,7 +4,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_57852678.0.20260903_133352",
   "wm_epoch": 1000000,
-  "selected_k": 10,
+  "selected_k": 1,
   "best_fixed_per_seed": {
    "0": "hiql-sd0",
    "1": "hiql-sd1",
@@ -50,7 +50,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_53931199.0.20260809_214031",
   "wm_epoch": 1000000,
-  "selected_k": 25,
+  "selected_k": 5,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -96,7 +96,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_53861556.0.20260809_050708",
   "wm_epoch": 1000000,
-  "selected_k": 10,
+  "selected_k": 5,
   "best_fixed_per_seed": {
    "0": "gcivl-sd0",
    "1": "gciql-sd1",
@@ -142,7 +142,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_55797745.0.20260820_174306",
   "wm_epoch": 1000000,
-  "selected_k": 10,
+  "selected_k": 5,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -188,7 +188,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_55797743.0.20260820_174046",
   "wm_epoch": 1000000,
-  "selected_k": 50,
+  "selected_k": 5,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -234,7 +234,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_54607461.0.20260813_205641",
   "wm_epoch": 1000000,
-  "selected_k": 50,
+  "selected_k": 5,
   "best_fixed_per_seed": {
    "0": "gcivl-sd0",
    "1": "gcivl-sd1",
@@ -280,7 +280,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_54607460.0.20260813_205641",
   "wm_epoch": 1000000,
-  "selected_k": 50,
+  "selected_k": 5,
   "best_fixed_per_seed": {
    "0": "crl-sd0",
    "1": "crl-sd1",
@@ -326,7 +326,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_54662965.0.20260818_064939",
   "wm_epoch": 1000000,
-  "selected_k": 100,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -372,7 +372,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_55797746.0.20260820_174306",
   "wm_epoch": 1000000,
-  "selected_k": 50,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -418,7 +418,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_53931203.0.20260809_214422",
   "wm_epoch": 1000000,
-  "selected_k": 25,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -464,7 +464,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_53931202.0.20260809_214422",
   "wm_epoch": 1000000,
-  "selected_k": 100,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -510,7 +510,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_54662966.0.20260818_064939",
   "wm_epoch": 1000000,
-  "selected_k": 25,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gcivl-sd1",
@@ -556,7 +556,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_54662910.0.20260818_064450",
   "wm_epoch": 1000000,
-  "selected_k": 50,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -602,7 +602,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_55797747.0.20260820_175157",
   "wm_epoch": 1000000,
-  "selected_k": 100,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -694,7 +694,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_53931200.0.20260809_214031",
   "wm_epoch": 1000000,
-  "selected_k": 1,
+  "selected_k": 10,
   "best_fixed_per_seed": {
    "0": "gciql-sd0",
    "1": "gciql-sd1",
@@ -786,7 +786,7 @@
   "policy_epoch": 1000000,
   "wm_dir": "/path/to/world_models/sd000_s_56830806.0.20260829_015837",
   "wm_epoch": 1000000,
-  "selected_k": 10,
+  "selected_k": 1,
   "best_fixed_per_seed": {
    "0": "gcivl-sd0",
    "1": "qrl-sd1",
