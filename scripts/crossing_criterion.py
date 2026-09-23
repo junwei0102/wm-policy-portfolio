@@ -39,7 +39,8 @@ flags.DEFINE_string('data_root', '/path/to/ogbench_100m', 'Root holding <env>-10
 flags.DEFINE_integer('n_chunks', 10, 'Training chunks to load (1M transitions each).')
 flags.DEFINE_integer('chunk_start', 0, 'First chunk index (e.g. 50 with --n_chunks=1: one held-out 1M sample, the size of the training set).')
 flags.DEFINE_string('pairing', 'crossing', 'crossing: k-step branches from a shared start state; random: two states of different trajectories '
-                    '(no shared start; pair difficulty is then controlled by the label margin, reported per band).')
+                    '(no shared start; pair difficulty is then controlled by the label margin, reported per band); '
+                    'sametraj: s_a, s_b and the goal g all on ONE trajectory (labels are the exact times to g, no success predicate).')
 flags.DEFINE_string('margin_bands', '', 'Comma list of margin band edges for the per-band report, e.g. "20,50,100" (label units).')
 flags.DEFINE_string('config', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'manifests', 'wmpp_env_config.json'), 'Env registry.')
 flags.DEFINE_string('wm_dir', None, 'World model (metric head); default: the registry entry.')
@@ -221,10 +222,9 @@ def main(_):
     pairs = []  # (i, j, g_idx_in_A, label, r_a, r_b)
     n_head = n_branch = 0
     partners = rng.integers(0, len(obs), len(queries))  # random pairing only
-    if FLAGS.pairing == 'random' and FLAGS.label == 'firstarrival':
-        # Simplest form: s_a and a later goal g on one trajectory; s_b on another trajectory that also reaches g
-        # (the environment's success predicate); labels are each trajectory's own time to reach g. The cell index
-        # only narrows the candidate states; reaching is decided by the exact predicate.
+    if FLAGS.pairing == 'sametraj':
+        # single-trajectory ranking: two earlier states of the trajectory that contains g. Times are first arrivals
+        # inside the goal set of g (same definition as the cross-trajectory pairing); states already inside are dropped.
         from world_model.success_predicates import cube_success, puzzle_success, scene_success
         if env.startswith('scene'):
             succ = scene_success
@@ -237,7 +237,52 @@ def main(_):
             if i + 2 >= hi_:
                 continue
             gi = rng.integers(i + 1, min(hi_, i + 1 + FLAGS.max_r))
-            r_a = gi - i
+            ib = rng.integers(max(ep_start[ep[i]], gi - FLAGS.max_r), gi)
+            if ib == i:
+                continue
+            lo_i = min(i, ib)
+            ok = succ(obs[lo_i:gi + 1], np.broadcast_to(obs[gi], (gi + 1 - lo_i, obs.shape[1]))) > 0
+            ta = lo_i + int(np.flatnonzero(ok[i - lo_i:])[0]) + (i - lo_i)
+            tb = lo_i + int(np.flatnonzero(ok[ib - lo_i:])[0]) + (ib - lo_i)
+            if ta == i or tb == ib:
+                continue
+            r_a, r_b = ta - i, tb - ib
+            if abs(r_a - r_b) < FLAGS.min_margin:
+                continue
+            n_head += 1; n_branch += 1
+            pairs.append((i, ib, gi, 1.0 if r_a < r_b else (0.0 if r_b < r_a else 0.5), r_a, r_b))
+        queries = np.array([], dtype=np.int64)
+    if FLAGS.pairing == 'random' and FLAGS.label == 'firstarrival':
+        # Simplest form: s_a and a later goal g on one trajectory; s_b on another trajectory that also reaches g
+        # (the environment's success predicate); labels are each trajectory's own time to reach g. The cell index
+        # only narrows the candidate states; reaching is decided by the exact predicate.
+        from world_model.success_predicates import cube_success, puzzle_success, scene_success
+        if env.startswith('scene'):
+            succ = scene_success
+        elif env.startswith('cube'):
+            succ = lambda o, g: cube_success(dict(single=1, double=2, triple=3, quadruple=4)[env.split('-')[1]], o, g)
+        else:
+            succ = lambda o, g: puzzle_success(int(env.split('-')[1].split('x')[0]) * int(env.split('-')[1].split('x')[1]), o, g)
+        def first_arrival(start, stop, gi):
+            """First index in [start, stop) whose state satisfies the predicate for the goal obs[gi], scanning the
+            whole segment (not only the goal's cell), or None."""
+            hit = np.flatnonzero(succ(obs[start:stop], np.broadcast_to(obs[gi], (stop - start, obs.shape[1]))) > 0)
+            return start + int(hit[0]) if len(hit) else None
+        n_a_at_goal = 0
+        for i in queries:
+            hi_ = ep_end[ep[i]]
+            if i + 2 >= hi_:
+                continue
+            gi = rng.integers(i + 1, min(hi_, i + 1 + FLAGS.max_r))
+            # A: the SAME definition as for B -- first state at or after s_a inside the goal set of g (g itself is
+            # inside it, so the scan always terminates at or before gi); s_a already inside the set is dropped.
+            ta = first_arrival(i, gi + 1, gi)
+            if ta == i:
+                n_a_at_goal += 1
+                continue
+            r_a = ta - i
+            # B: any other episode with a state inside the goal set; the cell index only proposes episodes, the
+            # first arrival is then found by the exact predicate over the whole episode
             b, e = lo_of[key[gi]]
             m = order[b:e]
             m = m[ep[m] != ep[i]]
@@ -248,10 +293,9 @@ def main(_):
                 continue
             eps_b = np.unique(ep[m])
             B = eps_b[rng.integers(0, len(eps_b))]
-            t_reach = m[ep[m] == B].min()                                  # first state of B inside the goal set
+            t_reach = first_arrival(ep_start[B], ep_end[B], gi)
             if t_reach - ep_start[B] < 2:
                 continue
-            ib = rng.integers(ep_start[B], min(t_reach, ep_start[B] + max(t_reach - ep_start[B], 1)))
             ib = rng.integers(max(ep_start[B], t_reach - FLAGS.max_r), t_reach)
             r_b = t_reach - ib
             if succ(obs[ib:ib + 1], obs[gi:gi + 1])[0] > 0 or abs(r_a - r_b) < FLAGS.min_margin:
@@ -259,6 +303,7 @@ def main(_):
             n_head += 1; n_branch += 1
             label = 1.0 if r_a < r_b else (0.0 if r_b < r_a else 0.5)
             pairs.append((i, ib, gi, label, r_a, r_b))
+        print(f'[cross] s_a already inside the goal set (dropped): {n_a_at_goal} of {len(queries)} queries', flush=True)
         queries = np.array([], dtype=np.int64)
     for qn, i in enumerate(queries):
         if FLAGS.pairing == 'random':
