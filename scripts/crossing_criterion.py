@@ -41,6 +41,8 @@ flags.DEFINE_string('pairing', 'crossing', 'crossing: k-step branches from a sha
                     '(no shared start; pair difficulty is then controlled by the label margin, reported per band).')
 flags.DEFINE_string('margin_bands', '', 'Comma list of margin band edges for the per-band report, e.g. "20,50,100" (label units).')
 flags.DEFINE_string('config', '/project/6067317/jwquan/wm-policy-portfolio/manifests/wmpp_env_config.json', 'Env registry.')
+flags.DEFINE_string('wm_dir', None, 'World model (metric head); default: the registry entry.')
+flags.DEFINE_string('policy_root', None, 'Bank root (direct head = its GCIQL member); default: the registry entry.')
 flags.DEFINE_string('seeds', '0,1,2', 'Bank seeds: one direct head (GCIQL member) per seed.')
 flags.DEFINE_integer('k', 10, 'Branch length in env steps (the family interval).')
 flags.DEFINE_float('arm_tol', 1.0, 'Head tolerance on the proprioceptive dims, in per-dim std units.')
@@ -345,7 +347,8 @@ def main(_):
     cluster = ep[P[:, 0]]
 
     # ---- value heads
-    wm = EnsembleWorldModel.load(cfg['wm_dir'], cfg['wm_epoch'])
+    wm_dir, policy_root = FLAGS.wm_dir or cfg['wm_dir'], FLAGS.policy_root or cfg['policy_root']
+    wm = EnsembleWorldModel.load(wm_dir, cfg['wm_epoch'])
     E = int(wm.config['num_members'])
     heads = {'metric': lambda s, g: np.asarray(wm.value_score(np.broadcast_to(s, (E, *s.shape)), np.broadcast_to(g, (E, *g.shape)))).mean(0)}
     # reference scorers that know the task dims: how much of the label is recoverable at all
@@ -360,7 +363,7 @@ def main(_):
     heads['ref/task_euclid'] = lambda s, g: -np.linalg.norm((s[:, task_dims] - g[:, task_dims]) / sd, axis=1)
     heads['ref/full_euclid'] = lambda s, g: -np.linalg.norm((s - g) / (obs.std(0) + 1e-6), axis=1)
     seeds = [int(x) for x in FLAGS.seeds.split(',')]
-    runs = find_run_dirs(env, cfg['policy_root'], cfg['policy_epoch'], algos=('gciql',), seeds=seeds)
+    runs = find_run_dirs(env, policy_root, cfg['policy_epoch'], algos=('gciql',), seeds=seeds)
     for name, run in sorted(runs.items()):
         pol = FrozenPolicy.load(run, cfg['policy_epoch'])
         heads[f'direct/{name}'] = (lambda p: (lambda s, g: np.asarray(p.value(s, g))))(pol)
