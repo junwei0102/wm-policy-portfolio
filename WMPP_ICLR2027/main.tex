@@ -17,8 +17,6 @@
 \usepackage{amsthm}
 \usepackage{amsmath,amssymb,mathtools}
 \usepackage{amsthm}
-\newtheorem{wmppc-theorem}{Theorem}
-\newtheorem{wmppc-lemma}[wmppc-theorem]{Lemma}
 \usepackage{booktabs,multirow,array,tabularx}
 \usepackage{graphicx}
 \usepackage{xcolor}
@@ -32,7 +30,18 @@
 \usepackage[nameinlink,capitalize,noabbrev]{cleveref}
 \usepackage{caption}
 \usepackage{subcaption}
+\usepackage{amsmath,amssymb,amsthm}
+% \providecommand{\wmpa}{WMPA}
 
+\theoremstyle{plain}
+\newtheorem{wmpatheorem}{Theorem}[section]
+\newtheorem{wmpalemma}[wmpatheorem]{Lemma}
+\newtheorem{wmpacorollary}[wmpatheorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{wmpaassumption}[wmpatheorem]{Assumption}
+
+\theoremstyle{plain}
 \hypersetup{colorlinks=true,citecolor=blue,linkcolor=blue,urlcolor=blue}
 \setlist[itemize]{leftmargin=*,topsep=2pt,itemsep=1pt}
 \setlist[enumerate]{leftmargin=*,topsep=2pt,itemsep=1pt}
@@ -58,6 +67,7 @@
 \IfFileExists{tables/numbers_mechanism.tex}{\input{tables/numbers_mechanism}}{}
 \IfFileExists{tables/numbers_diagnostics.tex}{\input{tables/numbers_diagnostics}}{}
 \IfFileExists{tables/numbers_wmseeds.tex}{\input{tables/numbers_wmseeds}}{}
+\IfFileExists{tables/numbers_kcgrid.tex}{\input{tables/numbers_kcgrid}}{}
 
 \title{World-Model Policy Arbiter for\\
 Goal-Conditioned Reinforcement Learning}
@@ -77,16 +87,16 @@ Goal-Conditioned Reinforcement Learning}
     \lhead{Under review as a conference paper at ICLR 2027}
 \fi
 \begin{abstract}
-Offline goal-conditioned reinforcement learning (GCRL) has produced a diverse set of goal-reaching algorithms, yet no single algorithm performs best across environments, goals, and even different phases of the same task. The standard practice is to evaluate a pool of candidate policies, retain the one that performs best in a given environment, and discard the rest. We instead ask whether frozen goal-conditioned policies can be retained and used collectively as a \emph{portfolio}. This setting poses two key challenges: the native critics associated with different policies are either not directly comparable or entirely absent, and uninformed switching between closed-loop controllers can disrupt coherent behavior. We introduce World-Model Policy Arbiter (\wmpa), a test-time framework that rolls each frozen policy forward in a learned state-space world model, evaluates the imagined futures with a shared goal-conditioned value function, and executes the highest-scoring policy for a short commitment interval before the next round of arbitration. \wmpa{} requires neither policy retraining nor privileged task-specific knowledge. Under the official OGBench evaluation protocol on \NumEnvs{} state-based datasets spanning maze navigation as well as cube, scene, and puzzle manipulation, \wmpa{} improves the macro-average success rate from the \MeanBest\% achieved by the best policy selected per dataset to \MeanWMPP\%, with statistically significant gains on \NumSigUp{} datasets. These gains include \GainCubeDoublePlay{} percentage points on \texttt{cube-double-play} and \GainScenePlay{} percentage points on \texttt{scene-play}.
+Offline goal-conditioned reinforcement learning (GCRL) has produced a diverse set of goal-reaching algorithms, yet no single algorithm performs best across environments, goals, and even different phases of the same task. The standard practice is to evaluate a pool of candidate policies, retain the one that performs best in a given environment, and discard the rest. We instead ask whether frozen goal-conditioned policies can be retained and used collectively as a \emph{portfolio}. This setting poses two key challenges: the native critics associated with different policies are either not directly comparable or entirely absent, and uninformed switching between closed-loop controllers can disrupt coherent behavior. We introduce World-Model Policy Arbiter (\wmpa), a test-time framework that rolls out each frozen policy in a learned state-space world model, evaluates the imagined futures with a shared goal-conditioned value function, and executes the highest-scoring policy for a short commitment interval before the next round of arbitration. \wmpa{} requires neither policy retraining nor privileged task-specific knowledge. Under the official OGBench evaluation protocol on \NumEnvs{} state-based datasets spanning maze navigation as well as cube, scene, and puzzle manipulation, \wmpa{} improves the macro-average success rate from the \MeanBest\% achieved by the best policy selected per dataset to \MeanWMPP\%, with statistically significant gains on \NumSigUp{} datasets. These gains include \GainCubeDoublePlay{} percentage points on \texttt{cube-double-play} and \GainScenePlay{} percentage points on \texttt{scene-play}.
 \end{abstract}
 
 \section{Introduction}
 
 Goal-conditioned reinforcement learning (GCRL) seeks to learn policies that reach user-specified goals. A wide range of approaches has been developed for this setting, including behavior cloning, temporal-difference learning, contrastive learning, quasimetric learning, and hierarchical control \citep{eysenbach2022contrastive,wang2023quasimetric,park2023hiql}. Because these approaches use different algorithmic structures, rely on different assumptions, and induce different behaviors, their relative performance varies across environments, goals, and task horizons; no single method consistently dominates \citep{park2025ogbench}.
 
-Most prior work focuses on training a stronger individual policy. Offline GCRL, however, naturally raises a different question. The standard practice evaluates these policies, retains the best-performing one, and discards the remainder. This procedure overlooks behaviors of the discarded policies that are useful only in particular states or phases of a task, and it leaves a basic question unanswered: \emph{given a set of frozen goal-conditioned policies, which policy should act from the current state for the current goal?} This selection problem is challenging for three reasons. First, the critics and learned representations of independently trained policies are not directly comparable, and some methods do not learn a value function at all. Second, each policy is a closed-loop controller, so its first action provides little information about the trajectory it will induce. Third, unconstrained switching between policies can disrupt temporally coherent behavior.
+Most prior work focuses on training a stronger individual policy. Offline GCRL, however, naturally raises a different question. The standard practice is to evaluate multiple policies, retain the best-performing one, and discard the remainder. This procedure overlooks behaviors of the discarded policies that are useful only in particular states or phases of a task, and it leaves a basic question unanswered: \emph{given a set of frozen goal-conditioned policies, which policy should act from the current state for the current goal?} This selection problem is challenging for three reasons. First, the critics and learned representations of independently trained policies are not directly comparable, and some methods do not learn a value function at all. Second, first action of a policy provides little information about the trajectory it will induce. Third, unconstrained switching between policies can disrupt temporally coherent behavior.
 
-Our key idea is to compare policies through the consequences they are predicted to produce. From the current state, our method, World-Model Policy Arbiter (\wmpa), rolls each frozen policy forward in a learned world model while conditioning all policies on the same final goal. It scores the resulting imagined futures with a shared goal-conditioned value function, executes the highest-scoring policy for a fixed commitment interval, and repeats this procedure. Unlike action-level model-predictive control, \wmpa{} does not optimize new action sequences; instead, it evaluates the behaviors already represented in the policy bank. All base policies remain frozen, and the selector requires no hand-designed progress signal, no rollouts in the real environment, and no privileged task knowledge.
+Our key idea is to compare policies through the consequences they are predicted to produce. From the current state, our method, World-Model Policy Arbiter (\wmpa), rolls out each frozen policy in a learned world model while conditioning all policies on the same final goal. It scores the resulting imagined futures with a shared goal-conditioned value function, executes the highest-scoring policy for a fixed commitment interval, and repeats this procedure. Unlike action-level model-predictive control, \wmpa{} does not optimize new action sequences; instead, it evaluates the behaviors already represented in the policy bank. All base policies remain frozen, and the selector requires no hand-designed progress signal, no rollouts in the real environment, and no privileged task knowledge.
 
 Scoring imagined states introduces an additional challenge because model rollouts produce state--goal pairs that are underrepresented in the training data.
 By default, we address this issue with a metric value function that uses separate state and goal encoders and defines the score as the negative Euclidean distance between the latent representations of the state and the goal.
@@ -98,7 +108,10 @@ For these datasets, we therefore score the same imagined futures with a direct g
 We make the following contributions:
 \begin{itemize}
     \item \textbf{Policy arbitration for GCRL.} We formulate test-time control over a bank of independently trained goal-conditioned policies as a policy-selection problem, which is distinct from selecting a single global winner or retargeting the subgoal of a single controller. We argue that offline GCRL is the natural setting for this problem: the policy bank incurs no additional data collection cost, because its members are trained entirely from the offline dataset without online interaction; moreover, goal-conditioning multiplies the situations in which different members excel.
-    \item \textbf{A novel method for policy arbitration.} \wmpa{} compares frozen policies by scoring their closed-loop imagined futures with a shared goal-conditioned value function, without policy retraining or privileged signals. We set the scoring horizon equal to the commitment interval ($k=c$) so that the amortized cost of arbitration per environment step remains constant, and the arbiter adds $3$--$4$\,ms per step on CPU.
+    \item \textbf{A novel method for policy arbitration.} \wmpa{} compares frozen policies by scoring their closed-loop imagined futures with a shared goal-conditioned value function, without policy retraining or privileged signals. We set the scoring horizon equal to the commitment interval ($k=c$) so that the amortized cost of arbitration per environment step remains constant, and the arbiter adds $3$--$4$\,ms per step on CPU. We also derive a conditional guarantee over the best fixed bank member:
+arbitration improves success when locally useful alternatives are available,
+true-dynamics scores separate inferior choices, and rollout-score errors
+rarely overturn that separation (\cref{app:wmpa_theory}).
     \item \textbf{Broad empirical study.} We evaluate \wmpa{} on \NumEnvs{} state-based OGBench datasets under the official protocol. We compare against every policy in the bank, a random-switching baseline with a matched commitment interval, and additional model-free and model-based baselines. We further analyze when arbitration is beneficial, using a per-episode hindsight oracle and policy-bank statistics.
 \end{itemize}
 
@@ -137,14 +150,14 @@ We make the following contributions:
 GCRL learns policies conditioned on a desired goal, using supervised, value-based, contrastive, quasimetric, and hierarchical objectives \citep{eysenbach2022contrastive,wang2023quasimetric,park2023hiql}; OGBench provides common datasets and reference implementations, and it shows that the strengths of these methods vary across navigation, stitching, stochasticity, and manipulation \citep{park2025ogbench}. Model-based GCRL uses a model to improve the policy being trained: planning with a learned model to fine-tune offline policies \citep[GOPlan;][]{wang2024goplan}, planning exploration goals \citep[PEG;][]{hu2023peg}, modeling transitions between arbitrary buffer states for goal navigation \citep{duan2024mun}, synthesizing goal-reaching data backward \citep{hoftmann2023backward}, or constructing self-curricula \citep{gong2024gcpo}; see \citet{liu2022gcrl} for a survey. Stronger recent learners \citep{dong2026hiflowq} and abstraction-based state--goal representations \citep{wibault2026abstraction} are complementary to \wmpa{}: they could serve as additional bank members and can supply the value head. Goal-conditioned hypernetworks even generate policies on demand \citep{faccio2023goalcond}. All of these approaches modify or create the policy; we leave every policy frozen and use the model only to choose among them.
 
 \paragraph{Test-time planning with frozen policies and world models.}
-Existing test-time methods devote computation to \emph{producing} behavior. Goal-conditioned policies serve as low-level controllers for planning through intermediate goals \citep{nasiriany2019planning}; Test-Time Graph Search builds a graph over dataset states and feeds subgoals to a single frozen policy \citep{opryshko2026ttgs}; CompPlan composes subgoal-conditioned instances of a single policy family through policy-conditioned jumpy models \citep{farebrother2026compplan}; and ALPS plans over Laplacian subgoal clusters with a one-step model \citep{shehmar2026laplacian}. All these methods ask \emph{which subgoal should one controller pursue?}, whereas \wmpa{} keeps the final goal fixed and asks \emph{which controller should act now?}, so we believe they are complementary. Hand-offs between task and recovery policies in safety-critical offline GCRL \citep{cao2024rbsl} are a two-controller special case of the switching \wmpa{} performs over an arbitrary bank with a learned, model-based trigger. World models, in turn, are used for action-level planning or training an amortized policy \citep{schrittwieser2020muzero,hafner2023dreamerv3}; sampling-based MPC with learned models \citep{williams2017mppi,hansen2022tdmpc} is the action-level baseline of \cref{app:ablations}, and hierarchical or reset-free world models \citep{schiewer2024hierarchical,yang2024resetfree} likewise generate behavior rather than evaluate it. \wmpa{} uses the model only to evaluate closed-loop behaviors already in the bank.
+Existing test-time methods devote computation to \emph{producing} behavior. Goal-conditioned policies serve as low-level controllers for planning through intermediate goals \citep{nasiriany2019planning}; Test-Time Graph Search builds a graph over dataset states and feeds subgoals to a single frozen policy \citep{opryshko2026ttgs}; CompPlan composes subgoal-conditioned instances of a single policy family through policy-conditioned jumpy models \citep{farebrother2026compplan}; and ALPS plans over Laplacian subgoal clusters with a one-step model \citep{shehmar2026laplacian}. All these methods ask \emph{which subgoal should one controller pursue?}, whereas \wmpa{} keeps the final goal fixed and asks \emph{which controller should act now?}, so we believe they are complementary. Hand-offs between task and recovery policies in safety-critical offline GCRL \citep{cao2024rbsl} are a two-controller special case of the switching \wmpa{} performs over an arbitrary bank with a learned, model-based trigger. World models, in turn, are used for action-level planning or training an amortized policy \citep{schrittwieser2020muzero,hafner2023dreamerv3}; sampling-based MPC with learned models \citep{williams2017mppi,hansen2022tdmpc} motivates the action-level baseline of \cref{app:ablations} which perturbs the first action, and hierarchical or reset-free world models \citep{schiewer2024hierarchical,yang2024resetfree} likewise generate behavior rather than evaluate it. \wmpa{} uses the model only to evaluate closed-loop behaviors already in the bank.
 
 \paragraph{Policy switching, options, and learned hierarchies.}
 Selecting among fixed policies by simulating each is a long-standing idea: policy switching and parallel rollout execute, at every state, the base policy with the highest simulated return, and both provably improve upon every base policy \citep{chang2004parallel,bertsekas1999rollout}; generalized policy improvement (GPI) achieves the same result with per-policy action-values, provided these values are comparable \citep{barreto2017successor}. In the options framework, each frozen member of $\mathbf{\Pi}$ is an option with a fixed-duration termination condition, and re-arbitrating every $c$ steps is a scheduled form of option interruption, which is guaranteed not to degrade performance when the switching value is exact \citep{sutton1999between}. \wmpa{} instantiates this lineage with a learned model, a truncated horizon, and goal conditioning: the model supplies the rollouts that the classical methods obtain from a simulator, and the shared value function avoids the need for the comparable per-policy action-value estimates required by GPI.
 Model-based hierarchical RL is a distinct lineage. Director selects latent goals for a worker trained in imagination \citep{hafner2022director}; SkiMo plans with a skill-dynamics model learned jointly with a skill VAE \citep{shi2022skimo}; SPlaTES shapes skills to be predictable by an abstract world model and plans over them with iCEM \citep{gurtler2025splates}; Puppeteer trains a separate high-level world model for each task on top of a frozen tracking controller \citep{hansen2025puppeteer}; and a learned gate over a frozen planner decides how much search to perform \citep{muppidi2026finding}. All of these methods learn the high level, most also co-adapt the low level, and their models generate or search over the executed behavior. \wmpa{} learns neither level: the candidates are complete goal-conditioned policies trained independently with different algorithms, the dynamics model is trained once on the dataset without reference to any policy, and the model only arbitrates among the candidates.
 
 \section{Goal-Conditioned Reinforcement Learning Preliminaries}
-
+\label{sec:prelim}
 Following \citet{park2025ogbench}, we consider goal-conditioned reinforcement learning over a controlled Markov process
 $\mathcal{M}=(\calS,\calA,\calG,\mu,p)$.
 Here, $\calS$ is the state space, $\calA$ is the action space, $\calG$ is the goal space, $\mu\in\Delta(\calS)$ is the initial-state distribution, and $p(s'\mid s,a)\colon\calS\times\calA\to\Delta(\calS)$ denotes the transition dynamics, where $\Delta(\cdot)$ denotes the space of probability distributions over its argument. A goal-conditioned policy $\pi(a\mid s,g)\colon\calS\times\calG\to\Delta(\calA)$ maps the current state and goal to a distribution over actions.
@@ -172,19 +185,20 @@ At arbitration time $t$, the arbiter selects a policy index $z_t\in\{1,\ldots,M\
     a_{t+j}\sim\pi_{z_t}(\cdot\mid s_{t+j},g),
     \qquad j=0,\ldots,c-1.
 \]
-The resulting controller is therefore a switching policy over the frozen portfolio members. The policy-portfolio objective is to maximize the expected goal-reaching success of this induced policy without modifying any member of $\PiBank$. The central problem is thus to determine, from the current state and goal, which portfolio member is expected to produce the most favorable future trajectory.
+The resulting controller is therefore a switching policy over the frozen portfolio members. The policy-portfolio objective is to maximize the expected goal-reaching success of this induced policy without modifying any member of $\PiBank$. The central problem is thus to determine, from the current state and goal, which portfolio member is expected to produce the most favorable future trajectory. 
+% Appendix~\ref{app:wmpa-theory} characterizes when such arbitration is guaranteed to match or exceed the best fixed member of the portfolio, by viewing each frozen policy as a temporally extended option.
 \section{World-Model Policy Arbiter}
 \label{sec:method}
 \wmpa{} has three components (\cref{fig:overview}): a bank of frozen goal-conditioned policies, a learned state-space world model for rolling every policy forward, and a single goal-conditioned value function that scores all policies' imagined futures. At each arbitration point the arbiter imagines $k$ steps of every policy, ranks candidates by the value of their imagined states, and executes the winner for $c=k$ environment steps before arbitrating again. The result is a switching controller over the bank: \cref{fig:episode} shows an episode in which the arbiter alternates among policies. The three subsections below describe the world model, the value function, and the rollout and ranking step.
 
 \subsection{Learned state-space world model}
 
-For each environment, we train an ensemble of $E$ independently parameterized MLP dynamics models~\citep{kurutach2018model} directly in the benchmark state space. Throughout this section, all states are raw benchmark states; the fixed normalizer $\nu(s)=(s-\mu_s)/\sigma_s$, whose statistics are computed from the logged trajectories, is applied only at the network input. Each member predicts a normalized one-step delta and returns the next state in raw coordinates,
+For each environment, we train an ensemble of $E$ independently parameterized MLP dynamics models~\citep{kurutach2018model} directly in the benchmark state space. Throughout this section, all states are raw benchmark states; the fixed normalizer $\nu(s)=(s-\mu_s)/\sigma_s$, whose statistics are computed from the logged trajectories, is applied only at the network input. Each member predicts a normalized one-step delta and returns the next state,
 \begin{align}
 \hat{\delta}^{(e)}_t &= f_{\theta_e}\big(\nu(s_t),a_t\big),\\
 \hat{s}^{(e)}_{t+1} &= \hat f_{\theta_e}(s_t,a_t) := s_t + \mu_{\Delta}+\sigma_{\Delta}\hat{\delta}^{(e)}_t,
 \end{align}
-where $\mu_{\Delta}$ and $\sigma_{\Delta}$ are fixed statistics computed from valid logged transitions. Multi-step predictions are obtained by applying the same raw-state map $\hat f_{\theta_e}$ to its own outputs, with re-normalization at every input. The outputs are trained to match non-normalized environment states and are consumed by the frozen policies exactly like real observations. The members are trained on $H$-step windows by unrolling their own predictions and penalizing the normalized error at every step,
+where $\mu_{\Delta}$ and $\sigma_{\Delta}$ are fixed statistics computed from valid logged transitions. Multi-step predictions are obtained by applying the same $\hat f_{\theta_e}$ to its own outputs, with re-normalization at every input. The outputs are trained to match non-normalized environment states and are consumed by the frozen policies exactly like real observations. The members are trained on $H$-step windows by unrolling their own predictions and penalizing the normalized error at every step,
 \begin{equation}
 \mathcal{L}_{\mathrm{dyn}} = \frac{1}{E}\sum_{e=1}^{E}
 \E_{\tau\sim\calD}
@@ -195,7 +209,7 @@ with a curriculum that increases the effective horizon from $1$ to $H$ over the 
 \subsection{Goal-conditioned value function}
 \label{sec:value}
 
-The arbiter scores every candidate's imagined states with a single goal-conditioned value function $V(s,g)$, so policies trained with different objectives are compared on a common scale. Only the ordering matters: futures reached by different candidates from the same decision state should be ranked in the same order as their realized outcomes. Nothing in the arbiter depends on how $V$ is parameterized, and we use two parameterizations whose inductive biases match different kinds of task progress; we choose between them per task family (\cref{sec:setup}, \cref{app:hyperparams}). We also swap the two value heads to show the performance difference (\cref{tab:scorer-selector}).
+The arbiter scores every candidate's imagined states with a single goal-conditioned value function $V(s,g)$, so policies trained with different objectives are compared on a common scale. Only the ordering matters: futures reached by different candidates from the same decision state should be ranked in the same order as their realized outcomes. Nothing in the arbiter depends on how $V$ is parameterized, and we use two parameterizations whose inductive biases match different kinds of task progress; we choose between them per task family (\cref{sec:setup}, \cref{app:hyperparams}). We also swap the two value heads to show the performance difference and discuss value-head choice in \cref{app:ablations}.
 
 \paragraph{Metric value (maze, cube, scene).} Where progress is geometric, like moving through a maze, displacing objects toward target poses, we use a latent distance with separate state and goal encoders for each ensemble member,
 \begin{equation}
@@ -234,7 +248,7 @@ trained by implicit Q-learning \citep{kostrikov2022iql} on the same dataset. Two
 so that $V_{\theta}$ approximates the value of the best dataset-supported action at each relabeled state--goal pair. It is the state-value network of the bank's IQL member, trained with the reference implementation's settings and reused unchanged as the scorer. Being one function applied to every candidate's imagined states, it keeps scores comparable across the bank exactly as the metric value does.
 
 \subsection{Counterfactual rollout and ranking}
-
+\label{sec:counterfactual}
 At each arbitration point, every frozen policy is rolled out in closed loop for $k$ model steps, acting deterministically on its own imagined states. All policies in the bank are Gaussian actors whose deterministic mode is the behavior deployed and evaluated by the benchmark, so the imagined branch reproduces the behavior that would be executed; we do not evaluate stochastic rollouts obtained by sampling actions from the policy distributions. For policy $i$ and ensemble member $e$,
 \begin{align}
 \hat{s}^{i,e}_{0} &= s_t,\\
@@ -250,13 +264,13 @@ S_i(s_t,g)=\max_{1\le h\le k}
 V_{\phi_e}(\hat{s}^{i,e}_{h},g).
 \label{eq:score}
 \end{equation}
-The max operator allows a policy to receive credit for reaching the goal before the end of the planning horizon. \cref{app:scoreabl} ablates both reductions (mean and final-state alternatives over the horizon; min and mean$-$std over ensemble members). \wmpa{} selects $i^*=\arg\max_i S_i$ and executes $\pi_{i^*}$ in the real environment for $c$ steps, and then repeats the arbitration (\cref{alg:wmpp}, \cref{app:hyperparams}).
+The max operator allows a policy to receive credit for reaching the goal before the end of the planning horizon. \cref{tab:ablations} ablates both reductions (mean and final-state alternatives over the horizon; min and mean$-$std over ensemble members). \wmpa{} selects $i^*=\arg\max_i S_i$ and executes $\pi_{i^*}$ in the real environment for $c$ steps, and then repeats the arbitration (\cref{alg:wmpp}, \cref{app:hyperparams}).
 
 \paragraph{Rollout length and policy commitment steps.}
 A single arbitration costs $M\cdot E\cdot k$ dynamics evaluations and the same
 number of value evaluations, where $M$ is the number of policies in the bank
 and $E$ is the number of members of the dynamics ensemble ($M=6$ and $E=3$
-throughout, \cref{sec:setup,app:wm}). Amortized over the commitment interval, the nominal model budget per environment step is $M E k/c$. We always set the two horizons equal, $k=c$, so that every configuration incurs the same cost of $M E$ model calls per environment step. The horizon is therefore a single hyperparameter that trades short-horizon reactivity against long-horizon foresight with no difference in amortized computational cost; it is fixed per task family (\cref{sec:setup}, \cref{app:hyperparams}).
+throughout, \cref{sec:setup,app:wm}). Amortized over the commitment interval, the nominal model budget per environment step is $M E k/c$. We always set the two horizons equal, $k=c$, so that every configuration incurs the same cost of $M E$ model calls per environment step. The horizon is therefore a single hyperparameter that trades short-horizon reactivity against long-horizon foresight with no difference in amortized computational cost; it is fixed per task family (\cref{sec:setup}, \cref{app:hyperparams}).\Cref{tab:kc-grid} shows that the large gains are insensitive to both the scoring horizon $k$ and the commitment interval $c$, including in cells with $k\neq c$.
 \section{Experiments}
 \label{sec:setup}
 
@@ -278,7 +292,7 @@ The largest improvements occur on multi-object manipulation tasks, including \Ga
 \resizebox{\linewidth}{!}{\input{tables/main_results}}
 \end{table}
 
-We compare \wmpa{} to action-level model-predictive control (MPC) applied to the best policy with the same $k$ and value function, re-planned at every environment step, in \Cref{tab:search} (\cref{app:ablations}).
+We compare \wmpa{} to action-level model-predictive control (MPC) applied to the best policy with the same $k$ and value function, re-planned at every environment step, in \Cref{tab:search}.
 MPC, given $k$ times the model budget of \wmpa{} ($18k$ versus $18$ imagined steps per environment step), is significantly worse than arbitration on \AblNumDownPolicyMpc{} of \AblNumEnvsPolicyMpc{} datasets and significantly better on \AblNumUpPolicyMpc{}, with its largest deficits on the datasets where arbitration gains most (\texttt{cube-single-play}, \texttt{cube-double-play}, \texttt{scene-play}), which supports the benefit of arbitrating among different policies beyond locally refining the actions of a single best policy.
 
 \subsection{Does the world model matter?}
@@ -295,7 +309,7 @@ We also isolate the effect of dynamics-model accuracy on the performance of the 
 % On the puzzle family the direct value's agent also provides two action-value heads, so a selector can dispense with imagined states altogether: Q-select executes $i^*=\arg\max_i \min_j Q_{\omega,j}(s,\pi_i(s,g),g)$ at the current state and commits to $\pi_{i^*}$ for $c$ steps (\cref{tab:qsel}, \cref{app:ablations}). At \wmpa{}'s commitment $c{=}10$ it trails \wmpa{} by \AblMeanDeltaQselSel{} points on average, significantly on \AblNumDownQselSel{} of \AblNumEnvsQselSel{} datasets and never significantly ahead. A critic trained on the dataset's own actions does not separate the members by their proposed action at one state, whereas the states they reach under the model do.
 
 % \paragraph{A model-free selector and the other value head.}
-A Q-select ablation also tests whether world-model rollouts are necessary at all. \Cref{tab:scorer-selector} (\cref{app:ablations}) fixes the same policy bank and evaluation episodes on all eighteen datasets. Q-select ranks each member's proposed action at the current state with the twin-Q critic and commits to the selected policy for $c$ steps, without imagined states; it already recovers part of the composition gain, significantly exceeding the best policy on \MechNumAboveBestQselOne{} of \MechNumEnvsQselOne{} datasets at $c{=}1$. At the matched commitment interval $c{=}k$, however, direct-value \wmpa{} improves upon Q-select by \MechMeanDeltaDirectQselK{} percentage points on average, with significant gains on \MechNumUpDirectQselK{} datasets. These results show that model-free critic arbitration can capture part of the benefit of dynamic policy selection, whereas rollout-based scoring provides additional gains on several tasks.
+A Q-select ablation also tests whether world-model rollouts are necessary at all. \Cref{tab:scorer-selector} fixes the same policy bank and evaluation episodes on all eighteen datasets. Q-select ranks each member's proposed action at the current state with the twin-Q critic and commits to the selected policy for $c$ steps, without imagined states; it already recovers part of the composition gain, significantly exceeding the best policy on \MechNumAboveBestQselOne{} of \MechNumEnvsQselOne{} datasets at $c{=}1$. At the matched commitment interval $c{=}k$, however, direct-value \wmpa{} improves upon Q-select by \MechMeanDeltaDirectQselK{} percentage points on average, with significant gains on \MechNumUpDirectQselK{} datasets. These results show that model-free critic arbitration can capture part of the benefit of dynamic policy selection, whereas rollout-based scoring provides additional gains on most of the tasks.
 
 \subsection{When does arbitration help?}
 \label{sec:when}
@@ -307,7 +321,7 @@ We construct the per-episode oracle by evaluating every policy in the bank on ea
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figures/episode_frames_cube_double.pdf}
-    \caption{\textbf{\wmpa{} composes policies within one episode.} A \texttt{cube-double-play} evaluation episode on which \wmpa{} succeeds. Top: the real state at four arbitration steps and at success, with the policy the world model selects there; the label under each frame describes the phase of the task. Bottom: the policy executed over the whole episode, one block per arbitration. The arbiter alternates between HIQL, which moves the free gripper to the next cube, and GCIQL, which grasps and places it.}
+    \caption{\textbf{\wmpa{} composes policies within one episode.} A \texttt{cube-double-play} evaluation episode. Top: the real state at four arbitration steps and at success, with the policy the world model selects there; the label under each frame describes the phase of the task. Bottom: the policy executed over the whole episode, one block per arbitration. The arbiter alternates between HIQL, which moves the free gripper to the next cube, and GCIQL, which grasps and places it.}
     \label{fig:episode}
 \end{figure}
 
@@ -319,14 +333,18 @@ We construct the per-episode oracle by evaluating every policy in the bank on ea
     \label{fig:when}
 \end{figure}
 
+% TODO: change Dgap, Bmax - U, they are not introduced in main; sentence of thoeory seems to be not that fit
 In \cref{fig:when}, we plot the gain of \wmpa{} against the gain of the per-episode oracle, where both gains are measured relative to the best policy in the bank.
 First, \wmpa{} significantly outperforms the per-episode oracle on \NumAboveUnionSig{} datasets, with large margins on \texttt{cube-double-play} (\WmppCubeDoublePlay\% versus \UnionCubeDoublePlay\%) and \texttt{scene-play} (\WmppScenePlay\% versus \UnionScenePlay\%).
 Because the oracle already selects a successful policy for each evaluation episode whenever one exists, per-episode selection alone cannot account for these gains; instead, they indicate a benefit of composing policies \emph{within} an episode (\cref{fig:episode} shows one such episode).
 Second, neither a large gap between the best and the second-best policy nor limited headroom between the best policy and the oracle precludes gains from switching.
 On \texttt{puzzle-3x3-play}, \wmpa{} improves over the best policy by \GainPuzzleThreebyThreePlay{} percentage points, even though the success rate of the second-best policy is \DgapPuzzleThreebyThreePlay{} percentage points lower than that of the best policy and the headroom to the per-episode oracle is only \HeadroomPuzzleThreebyThreePlay{}\%.
-Similarly, on \texttt{cube-single-play} ($D_{\mathrm{gap}}=\DgapCubeSinglePlay$, $U-B_{\max}=\HeadroomCubeSinglePlay$), the gain is \GainCubeSinglePlay{} percentage points.
+Similarly, on \texttt{cube-single-play}, the second-best policy trails the best by \DgapCubeSinglePlay{} percentage points and the oracle provides only \HeadroomCubeSinglePlay{} points of headroom, yet the gain is \GainCubeSinglePlay{} percentage points.
 Both gains exceed the corresponding static headroom, which shows that within-episode composition can improve performance even when a single member is substantially stronger than the others overall.
-Moreover, the bank need not be drawn from a single dataset: pooling the policies trained on the \texttt{play} and \texttt{noisy} data of an environment into one twelve-member bank never degrades the performance of \wmpa{} and improves it whenever the added members contribute new competencies (\cref{app:bank-composition}).
+Moreover, the bank need not be drawn from a single dataset: pooling the policies trained on the \texttt{play} and \texttt{noisy} data of an environment into one twelve-member bank never degrades the performance of \wmpa{} and improves it whenever the added members contribute new competencies (\cref{app:bank-composition}). A complementary analysis in \cref{app:wmpa_theory} expresses the gain over
+the best fixed bank member as accumulated one-chunk advantages and bounds
+the loss from selecting inferior members using score separation and
+rollout-score error.
 
 \subsection{Runtime}
 
@@ -334,7 +352,7 @@ Moreover, the bank need not be drawn from a single dataset: pooling the policies
 
 On average, \wmpa{} performs $ME\approx 18$ dynamics and value evaluations per environment step.
 With 8 CPU threads, this adds $3$--$4$\,ms per step relative to a fixed policy.
-\Cref{app:runtime} reports switch counts, decisions per episode, usage entropy, and latency.
+\Cref{app:runtime} reports training cost, switch counts, decisions per episode, usage entropy, and latency.
 
 % \section{Discussion}
 
@@ -350,16 +368,16 @@ With 8 CPU threads, this adds $3$--$4$\,ms per step relative to a fixed policy.
 % The study uses state observations; pixels would require a policy-compatible latent world model or a shared visual encoder. The auxiliary models are trained per environment, so the contribution is policy reuse, not cross-environment transfer, and the metric architecture is an inductive bias, not a guarantee, on imagined states. The per-family interval and value parameterization were fixed on held-out episodes of the same five evaluation goals; OGBench provides no further goals, so their transfer to unseen goals is untested. Random switching with a per-dataset post-hoc interval remains competitive on a few datasets where stalling policies benefit from any restart, and with a scorer that ranks candidates at chance a single dominant policy makes arbitration a net loss. All bank members are trained on the same dataset with the benchmark's reference implementations; banks that mix data or interfaces are outside the present evidence. Finally, simulation results do not establish robustness on real robots, and the bank-statistic associations rest on \NumEnvs{} datasets.
 
 \label{sec:limitations}
-This study uses state observations and per-environment transition models. Pixel observations would require either a latent world model with a shared visual encoder across all policies or a world model that produces realistic images. We leave visual environments to future work. Additionally, \wmpa{} selects among existing behaviors and cannot create new ones: when every member is at the task floor, one member is already saturated, or the members fail on the same episodes, arbitration typically does no better than the best policy.
+This study uses state observations and per-environment transition models. Pixel observations would require either a latent world model with a shared visual encoder across all policies or a world model that produces realistic images. We leave visual environments to future work. Additionally, \wmpa{} selects among existing behaviors and cannot create new ones: when every member is at the task floor, one member is already saturated, or the members fail on the same subtasks, arbitration typically does no better than the best policy.
 Finally, arbitration adds test-time computation. With $k{=}c$, the cost is constant at $ME$ model and value evaluations per environment step, which amounts to a few milliseconds on CPU (\cref{app:runtime}), a modest overhead. This overhead also suggests a direction for future work: the same world model can be used offline, either as a teacher that distills the arbiter's choices into a single policy or as a DAgger-style generator of corrected training data, retaining the reliability gained through arbitration without a world model in the inference loop.
 
 \section{Conclusion}
 
-We have introduced World-Model Policy Arbiter (\wmpa), a test-time framework augmenting frozen goal-conditioned policies with learned policy selection. \wmpa{} rolls each policy forward in a learned world model, ranks the imagined futures with a single shared goal-conditioned value function, and executes the highest-scoring controller for a short commitment interval. It requires neither policy retraining nor a privileged task-specific progress signal. Under the official OGBench protocol, the arbitrated portfolio improves upon the best policy in its bank by \MeanGain{} points on average and by $33$--$41$ points on multi-object manipulation, is significantly above a per-episode hindsight oracle on \NumAboveUnionSig{} datasets, and clearly outperforms a random-switching baseline. More broadly, these results motivate viewing world models as test-time evaluators of existing goal-conditioned behaviors, not only as generators of new actions.
+We have introduced World-Model Policy Arbiter (\wmpa), a test-time framework augmenting frozen goal-conditioned policies with learned policy selection. \wmpa{} rolls each policy forward in a learned world model, ranks the imagined futures with a single shared goal-conditioned value function, and executes the highest-scoring controller for a short commitment interval. It requires neither policy retraining nor a privileged task-specific progress signal. Under the official OGBench protocol, the arbitrated portfolio improves upon the best policy in its bank by \MeanGain{} points on average and by $33$--$41$ points on multi-object manipulation, is significantly above a per-episode hindsight oracle on \NumAboveUnionSig{} datasets, andoutperforms a random-switching baseline. More broadly, these results motivate viewing world models as test-time evaluators of existing goal-conditioned behaviors, not only as generators of new actions.
 
 \label{page:endconclusion}
 \section*{Reproducibility Statement}
-Every table and figure is generated by a single script from the evaluation logs; the submission will release configuration files, policy-bank identifiers, fixed episode seed lists, and the scripts that reproduce every number. The appendix specifies architectures, normalization, relabeling distributions, training schedules, per-dataset planning settings, evaluation episodes, statistical procedures, and runtime hardware. An anonymous repository is provided as supplementary material.
+The supplementary material contains an anonymized copy of our code. It includes the training entry points for the policy bank, which wrap the unmodified OGBench reference implementations, and for the world model with its value head; the evaluation script that runs \wmpa{} and every control and ablation reported in this paper; and the scripts that aggregate the per-episode logs into success rates and paired hierarchical-bootstrap intervals. A per-dataset registry records the bank, the checkpoints, and the reported interval for all \NumEnvs{} datasets, and the software versions are listed. Reset seeds are a deterministic function of the dataset, the goal, and the episode index, so any method can be re-evaluated on exactly the initial states used here. All datasets are the public OGBench releases; trained checkpoints and raw evaluation logs are omitted because of their size. 
 
 \section*{Ethics Statement}
 This work studies simulated control benchmarks and does not involve human participants or sensitive personal data.
@@ -399,7 +417,7 @@ content of this work, including all code, results, claims, and text.
 \end{algorithmic}
 \end{algorithm}
 
-\Cref{tab:settings} lists the settings used throughout \wmpa{}.
+\Cref{tab:settings} lists the settings used throughout \wmpa{} main results (\cref{tab:main}).
 % the \wmpa{} horizon and commitment $k{=}c$ and the \randomswitch{} interval $c$ per task family, and the auxiliary-model settings per family (training horizon $H$, discount $\gamma$, expectile $\kappa$, smoothness weight $\lambda_{\mathrm{smooth}}$; a slash separates values that differ within a family, e.g.\ the smoothness weight is $10$ on \texttt{antmaze-large} and $0$ on the other mazes). The two horizons were fixed on held-out episodes (indices $50$--$99$ of the same goals) and never on the reported episodes; every diagonal cell costs the same $ME$ model calls per environment step.
 
 \begin{table}[htbp]
@@ -410,6 +428,15 @@ content of this work, including all code, results, claims, and text.
 \setlength{\tabcolsep}{5pt}
 \resizebox{\linewidth}{!}{\input{tables/settings_family}}
 \end{table}
+
+\begin{table}[t]
+\caption{\textbf{Sensitivity to the imagination horizon $k$ and the commitment $c$} on three datasets with large gains ($k \ge c$. A row fixes $k$, a column fixes $c$, and the diagonal is $k=c$; the cell reported in \cref{tab:main} is underlined. Success is the mean $\pm$ the half-width of the $95\%$ interval, switches are policy changes per episode, and latency is the median wall-clock time per environment step on the CPU evaluation nodes. A cell costs $18k/c$ model calls per step, so only the diagonal keeps the budget of \cref{tab:main}.}
+\label{tab:kc-grid}
+\centering\small
+\resizebox{\linewidth}{!}{\input{tables/kc_grid}}
+\end{table}
+
+\Cref{tab:kc-grid} varies $k$ and $c$ on three datasets with large gains. The interval is not tuned extensively for each dataset; instead, it is kept the same within each dataset family. Across all \KcGridNumCells{} cells, every cell retains a gain of at least \KcGridMinGain{} points over the best policy. This table shows that the large gains on these manipulation tasks are insensitive to the hyperparameter setting and are attributable to the \wmpa{} algorithm itself.
 
 \section{No-Model Switching Controls}
 \label[appendix]{app:random-c}
@@ -425,7 +452,14 @@ content of this work, including all code, results, claims, and text.
 \input{tables/random_by_c}
 \end{table}
 
-\Cref{tab:stall} reports the stall-restart controller, a model-free baseline that switches policies upon \emph{evidence of being stuck} rather than on a fixed schedule. It draws its first policy uniformly at random from the bank and then continues to execute the incumbent; at every step, it measures how far the state has moved over the last $m$ environment steps, $\|\nu(s_t)-\nu(s_{t-m})\|_2$, in the normalized observation space of the world model (each dimension is divided by its standard deviation over the dataset, so that the threshold is dimensionless and identical across datasets). When this displacement falls below $\varepsilon=0.05$, the agent is declared stalled, and the controller restarts it with a uniformly random \emph{other} bank member and then waits at least $m$ steps before the trigger can fire again. It uses no world model and no value function, and it is the natural alternative to \wmpa{} wherever the gains of switching come from escaping stalls rather than from choosing the right policy: if a stall-then-restart rule matched \wmpa{}, the learned score would be unnecessary. We report windows $m\in\{5,10,25,50\}$; shorter windows trigger restarts more readily. The controller outperforms \wmpa{} on \NumStallBeatsWmpp{} of \NumEnvsStall{} datasets and does not recover the manipulation gains, so a displacement trigger is a poor proxy for the situations in which switching is beneficial.
+\Cref{tab:stall} reports the results of the stall-restart controller, a model-free baseline that switches policies in response to \emph{evidence of being stuck} rather than on a fixed schedule. The controller draws the first
+policy uniformly at random from the bank and then continues to execute the incumbent policy. At every step, it measures the displacement of the state over the last $m$ environment steps, $\|\nu(s_t)-\nu(s_{t-m})\|_2$, in the
+normalized observation space that is also used by the world model. In this space, each dimension is divided by its standard deviation over the dataset, so that the threshold is dimensionless and identical across datasets. When
+the displacement falls below $\varepsilon=0.05$, the agent is declared stalled. The controller then restarts the agent with a member drawn uniformly at random from the \emph{other} bank members and waits at least
+$m$ steps before the trigger can be activated again. The controller uses neither a world model nor a value function, and it is the natural alternative to \wmpa{} in settings where the gains of switching come from
+escaping stalls rather than from choosing the right policy: if such a stall-restart rule matched the performance of \wmpa{}, the learned score would be unnecessary. We report results for window lengths
+$m\in\{5,10,25,50\}$; shorter windows trigger restarts more readily. The controller outperforms \wmpa{} on only \NumStallBeatsWmpp{} of the \NumEnvsStall{} datasets and does not recover the gains that \wmpa{} obtains
+on the manipulation datasets. These results indicate that a displacement trigger is a poor proxy for the situations in which switching is beneficial.
 
 \begin{table}[htbp]
 \caption{\textbf{Stall-restart control}: a no-model controller that keeps the incumbent policy and switches to a random \emph{other} policy only when the normalized displacement over the last $m$ steps falls below $\varepsilon$; same bank, episodes, and protocol as \cref{tab:main}. Numbers within $95\%$ of the row maximum are in bold.}
@@ -446,7 +480,23 @@ content of this work, including all code, results, claims, and text.
 \Cref{tab:scorer-selector} varies only the value head or the selector, holding everything else fixed, on all eighteen datasets. Q-select, the model-free selector built from the twin-Q critic, is significantly above the best policy on \MechNumAboveBestQselOne{} of \MechNumEnvsQselOne{} datasets at $c{=}1$ and on \MechNumAboveBestQselK{} at $c{=}k$; compared with direct-value \wmpa{}, which scores imagined states with the state-value function $V$ of the same agent, it trails by \MechMeanDeltaDirectQselK{} points on average at a matched commitment interval, significantly so on \MechNumUpDirectQselK{} of \MechNumEnvsDirectQselK{} datasets. Replacing the default value head with the alternative reduces mean success on most datasets and lowers macro-average success by approximately \MechMeanDeltaOther{} percentage points. The effect is nevertheless task dependent: on cube-triple-play, the direct head raises mean success from 1\% to 9\%.
 
 \begin{table}[htbp]
-\caption{\textbf{WM action search vs.\ arbitration} with the same horizon $k$ and value on every dataset: sampling MPC on the best policy. At every environment step the candidates are the policy's deterministic action $\pi(s_t,g)$ and $N{-}1{=}5$ Gaussian perturbations of it ($\sigma{=}0.2$); each candidate is imagined for $k$ steps, where only the first action differs and the remaining $k{-}1$ steps follow the policy's deterministic output closed-loop on the imagined states, exactly like a candidate policy rolled out in \wmpa{}. Candidates are scored like \wmpa{}, where the first action of the best one is executed, and the search is repeated at the next step ($c{=}1$). Its budget is $N E k = 18k$ model steps per environment step against $M E = 18$ for \wmpa{}: equal on the mazes, $5\times$ larger on the cube family, and $10\times$ larger on the scene and puzzle families. On the puzzle family both use the direct value. Numbers within $95\%$ of the row maximum are shown in bold.}
+\caption{\textbf{WM action search vs.\ arbitration} with the same horizon
+$k$ and the same value function on every dataset. The action search applies
+sampling-based MPC on top of the best policy. At every environment step, the
+candidates are the deterministic action $\pi(s_t,g)$ of the policy and
+$N{-}1{=}5$ Gaussian perturbations of this action ($\sigma{=}0.2$). Each
+candidate is imagined for $k$ steps: only the first action differs across
+candidates, and the remaining $k{-}1$ steps follow the deterministic output
+of the policy in closed loop on the imagined states, exactly as in the
+rollout of a candidate policy in \wmpa{}. The candidates are scored as in
+\wmpa{}, the first action of the best candidate is executed, and the search
+is repeated at the next step ($c{=}1$). The action search uses
+$N E k = 18k$ model steps per environment step, compared with $M E = 18$ for
+\wmpa{}. The two budgets are equal on the mazes, whereas the budget of the
+action search is $5\times$ larger on the cube family and $10\times$ larger
+on the scene and puzzle families. On the puzzle family, both methods use the
+direct value. Selecting the best policy per dataset as a base for MPC serves as oracle. Numbers that are at least $95\%$ of the row maximum are shown
+in bold.}
 
 \label{tab:search}
 \centering
@@ -479,7 +529,7 @@ content of this work, including all code, results, claims, and text.
 % \end{table}
 
 \begin{table}[t]
-\caption{\textbf{Comparison of value heads and selectors} at a fixed cell on all the datasets. The world model, the bank, and the evaluation episodes are held fixed; only the scorer or the selector varies. \wmpa{} scores imagined states with either the metric value or the direct value; $^{\dagger}$ marks the head reported in \cref{tab:main}. Q-select uses the same twin-Q critic to rank the action proposed by each policy at the current state, $i^*=\arg\max_i\min_j Q_{\omega,j}(s,\pi_i(s,g),g)$, without any imagined states, re-selecting either at every step ($c{=}1$) or every $c{=}k$ steps. The last column is the paired contrast between the two selectors that share the same underlying agent, direct-value \wmpa{} minus Q-select at $c{=}k$, with its $95\%$ interval: it isolates the contribution of scoring imagined successor states with the critic. Entries are the mean success rate $\pm$ the half-width of the $95\%$ hierarchical-bootstrap interval, and values within $95\%$ of the row maximum are shown in bold.}
+\caption{\textbf{Comparison of value heads and selectors} at a fixed cell on all the datasets. The world model, the bank, and the evaluation episodes are held fixed; only the scorer or the selector varies. \wmpa{} scores imagined states with either the metric value or the direct value; $^{\dagger}$ marks the head reported in \cref{tab:main}. Q-select uses the same twin-Q critic to rank the action proposed by each policy at the current state, $i^*=\arg\max_i\min_j Q_{\omega,j}(s,\pi_i(s,g),g)$, without any imagined states, re-selecting either at every step ($c{=}1$) or every $c{=}k$ steps. The last column is the paired contrast between the two selectors that share the same underlying agent, direct-value \wmpa{} minus Q-select at $c{=}k$, with its $95\%$ interval: it isolates the contribution of scoring imagined successor states with the critic. Entries are the mean success rate $\pm$ the half-width of the $95\%$ hierarchical-bootstrap interval, and values within $95\%$ of the row maximum are shown in bold (${}^{*}$: interval excludes zero).}
 \label{tab:scorer-selector}
 \centering
 \small
@@ -499,10 +549,10 @@ content of this work, including all code, results, claims, and text.
 \section{Bank Composition}
 \label[appendix]{app:bank-composition}
 
-Every bank in the main study is trained on a single dataset. \Cref{tab:bank-composition} tests the next step: for an environment with two datasets, the six policies trained on its \texttt{play} data and the six trained on its \texttt{noisy} data are pooled into a single twelve-member bank, and \wmpa{} arbitrates over all twelve members with the same world model, value function, interval, and episodes as the six-member run on that dataset (nothing is retrained; the extra members are simply loaded from the checkpoints of the other dataset). This is the simplest case of a heterogeneous portfolio: same environment and interface, different training data. It isolates how arbitration handles members whose failure modes differ because their training data differ. For each base dataset, the table reports the best policy of the pooled bank, \randomswitch{} and \wmpa{} over the pooled bank, and two paired contrasts: \wmpa{} versus the best policy of the pooled bank, and pooled-bank \wmpa{} versus six-member \wmpa{} on the same episodes. On \texttt{puzzle-4x4-play}, the best policy of the pooled bank is a foreign member, namely the GCIQL policy trained on the \texttt{noisy} data, which succeeds on \BankPooledBestPuzzleFourbyFourPlay\% of the \texttt{play} episodes, compared with \BankFullBestPuzzleFourbyFourPlay\% for the native one. The second contrast is the informative one. Where the added members contribute new competencies, the pooled bank outperforms the original one (\texttt{cube-double-play}: \BankDeltaFullPooledCubeDoublePlay); where they largely duplicate competencies already present, the pooled bank matches the original (\texttt{scene-play}: \BankDeltaFullPooledScenePlay; \texttt{puzzle-4x4-play}: \BankDeltaFullPooledPuzzleFourbyFourPlay), which indicates that the scorer is not misled by redundant or out-of-distribution candidates; moreover, on \texttt{puzzle-4x4-play}, \wmpa{} still gains \BankDeltaPooledPuzzleFourbyFourPlay{} points over a best policy that is itself foreign. We interpret this as evidence that \wmpa{} can be applied without re-tuning to banks assembled from policies trained on different data, provided that they share the same observation, action, and goal interfaces.
+Every bank in the main study is trained on a single dataset. \Cref{tab:bank-composition} tests the next step: for an environment with two datasets, the six policies trained on its \texttt{play} data and the six trained on its \texttt{noisy} data are pooled into a single twelve-member bank, and \wmpa{} arbitrates over all twelve members with the same world model, value function, interval, and episodes as the six-member run on that dataset (nothing is retrained; the extra members are simply loaded from the checkpoints of the other dataset). This is the simplest case of a heterogeneous portfolio: same environment and interface, different training data. It isolates how arbitration handles members whose failure modes differ because their training data differ. For each base dataset, the table reports the best policy of the pooled bank and \wmpa{} over the pooled bank, and two paired contrasts: \wmpa{} versus the best policy of the pooled bank, and pooled-bank \wmpa{} versus six-member \wmpa{} on the same episodes. On \texttt{puzzle-4x4-play}, the best policy of the pooled bank is a foreign member, namely the GCIQL policy trained on the \texttt{noisy} data, which succeeds on \BankPooledBestPuzzleFourbyFourPlay\% of the \texttt{play} episodes, compared with \BankFullBestPuzzleFourbyFourPlay\% for the native one. The second contrast is the informative one. Where the added members contribute new competencies, the pooled bank outperforms the original one (\texttt{cube-double-play}: \BankDeltaFullPooledCubeDoublePlay); where they largely duplicate competencies already present, the pooled bank matches the original (\texttt{scene-play}: \BankDeltaFullPooledScenePlay; \texttt{puzzle-4x4-play}: \BankDeltaFullPooledPuzzleFourbyFourPlay), which indicates that the scorer is not misled by redundant or out-of-distribution candidates; moreover, on \texttt{puzzle-4x4-play}, \wmpa{} still gains \BankDeltaPooledPuzzleFourbyFourPlay{} points over a best policy that is itself foreign. We interpret this as evidence that \wmpa{} can be applied without re-tuning to banks assembled from policies trained on different data, provided that they share the same observation, action, and goal interfaces.
 
 \begin{table}[htbp]
-\caption{\textbf{Pooled play+noisy banks}: the six policies of the base dataset plus the six trained on its sibling dataset, arbitrated with the base dataset's world model, value, and interval on the base dataset's episodes. $P$: bank size; best policy of that bank and its success; \randomswitch{} and \wmpa{} over that bank; paired contrasts of \wmpa{} against the bank's best policy and of pooled-bank \wmpa{} against the six-member \wmpa{} of the row above. Numbers within $95\%$ of the row maximum are in bold. (${}^{*}$: interval excludes zero).}
+\caption{\textbf{Pooled play+noisy banks}: the six policies of the base dataset plus the six trained on its sibling dataset, arbitrated with the base dataset's world model, value, and interval on the base dataset's episodes. $P$: bank size; best policy of that bank and its success; \wmpa{} over that bank; paired contrasts of \wmpa{} against the bank's best policy and of pooled-bank \wmpa{} against the six-member \wmpa{} of the row above. Numbers within $95\%$ of the row maximum are in bold. (${}^{*}$: interval excludes zero).}
 \label{tab:bank-composition}
 \centering
 \scriptsize
@@ -528,14 +578,14 @@ where $\E[\bar V]$ is an exponential moving average of the mean value; this term
 
 \paragraph{Direct value head (puzzle).} The direct value $V_\theta$ follows the design of GCIQL, namely an MLP with three hidden layers of width $512$ and layer normalization, and is trained with the puzzle recipe of the reference implementation: the same relabeling mixture, $\gamma=0.99$, $\tau=0.005$, $\kappa=0.9$, and no value or target clipping. The two action-value heads $Q_{\omega,1},Q_{\omega,2}$ share this architecture and the training batches; $\bar Q$ in \cref{eq:direct-expectile} is the minimum of their target copies, and the same $\min_j Q_{\omega,j}$ is the scorer of the model-free Q-select baseline (\cref{tab:scorer-selector}).
 
-\paragraph{Optimization.} The dynamics and value losses are summed with unit weights and optimized with Adam (learning rate $3\times10^{-4}$) at batch size $1024$ for $10^6$ steps on a single H100 MIG slice (approximately $4$--$8$ hours per dataset). The checkpoint at $10^6$ steps is used throughout. The same code path serves both training and test-time imagination, so that predicted states can be consumed directly by every frozen policy. The joint optimization described here applies to the dynamics and metric-value networks. The direct scorer is loaded from the pretrained GCIQL checkpoint and remains frozen during model training.
+\paragraph{Optimization.} The dynamics and value losses are summed with unit weights and optimized with Adam (learning rate $3\times10^{-4}$) at batch size $1024$ for $10^6$ steps on a single H100 MIG slice. The checkpoint at $10^6$ steps is used throughout. The same code path serves both training and test-time imagination, so that predicted states can be consumed directly by every frozen policy. The joint optimization described here applies to the dynamics and metric-value networks. The direct scorer is loaded from the pretrained GCIQL checkpoint and remains frozen during model training.
 \section{Evaluation Protocol, Statistics, and the Static Per-Episode Oracle}
 \label[appendix]{app:bank-stats}
 
 \paragraph{Evaluation protocol and statistics.}
 Every number follows the official OGBench evaluation: five goals per dataset, $50$ episodes per goal, deterministic actions ($250$ episodes per bank seed, $750$ per method), with every bank policy, \wmpa{}, and \randomswitch{} on the same fixed episode seeds, so all comparisons are paired per episode. Uncertainty is a hierarchical bootstrap of per-episode differences over bank seeds then episodes ($10^4$ resamples, 95\% percentile intervals); a difference is significant when its interval excludes zero. 
 
-\Cref{tab:bank-stats} lists, per dataset, the bank statistics of \cref{sec:when}. $B_{\max}$, $D_{\mathrm{gap}}$ are computed from the scores of \cref{tab:main}. Because every bank member is evaluated on the same \OracleEpisodes{} episodes per dataset ($5$ goals $\times$ \OracleEpsPerGoal{} episodes $\times$ $3$ bank seeds) as \wmpa{} and \randomswitch{}, the static per-episode oracle needs no additional runs: $U$ is the mean over these episodes of $\max_i \mathbf{1}[\text{policy } i \text{ succeeds}]$, and $U-B_{\max}$ is the headroom available to any per-episode selector that does not switch within an episode. When we say that \wmpa{} exceeds the oracle, we count datasets where it does so by at least one point (\NumAboveUnion{} datasets); it is numerically above $U$ on \NumAboveUnionAny{}, the remainder being floor or saturated datasets where the difference is below one point. As a pre-specified criterion, we also report the paired hierarchical bootstrap of the per-episode difference \wmpa$-U$ on the same episodes: the interval excludes zero upward on \NumAboveUnionSig{} datasets and downward on \NumBelowUnionSig{} (the latter concentrated in the dominance, floor, and saturation regimes of \cref{sec:when}).
+\Cref{tab:bank-stats} reports, for each dataset, the bank statistics introduced in \cref{sec:when}. Here, $B_{\max}$ denotes the success rate of the best policy, and $D_{\mathrm{gap}}$ denotes the performance gap between the best and second-best policies. Both quantities are computed from the scores in \cref{tab:main}. Because every bank member is evaluated on the same episodes as \wmpa{} and \randomswitch{}, namely \OracleEpisodes{} episodes per dataset ($5$ goals $\times$ \OracleEpsPerGoal{} episodes $\times$ $3$ bank seeds), the static per-episode oracle requires no additional runs. When we state that \wmpa{} exceeds the oracle, we count only the datasets on which it does so by at least one percentage point (\NumAboveUnion{} datasets). As a pre-specified criterion, we also report a paired hierarchical bootstrap confidence interval for the per-episode difference \wmpa$-U$ on the same episodes: the interval lies entirely above zero on \NumAboveUnionSig{} datasets.
 
 % \begin{figure}[htbp]
 %     \centering
@@ -553,7 +603,7 @@ Every number follows the official OGBench evaluation: five goals per dataset, $5
 % \end{figure}
 
 \begin{table}[htbp]
-\caption{\textbf{Bank statistics and the static per-episode oracle (\%)}. $U$ is the success of a hindsight selector that picks the successful policy for each episode; $U-B_{\max}$ is the headroom available to any per-episode selector without within-episode switching. \wmpa{} and $\Delta$\wmpa{} are the numbers of \cref{tab:main}. \wmpa$-U$ is the paired per-episode contrast between \wmpa{} and the oracle on the same episodes, with a hierarchical-bootstrap interval over bank seeds and episodes. Among $B_{\max}$, $U$, and \wmpa{}, entries within $95\%$ of the row maximum are in bold; $U$ is a hindsight bound, not a deployable method. (${}^{*}$: interval excludes zero).}
+\caption{\textbf{Bank statistics and the static per-episode oracle (\%)}. Here, $U$ is the success rate of a hindsight selector that picks a successful policy for each episode whenever one exists, and $U-B_{\max}$ is the headroom available to any per-episode selector that does not switch policies within an episode. The \wmpa{} column reports the scores from \cref{tab:main}, and $\Delta$\wmpa{} is the difference between \wmpa{} and $B_{\max}$. The \wmpa$-U$ column reports the paired per-episode difference between \wmpa{} and the oracle on the same episodes, together with a hierarchical bootstrap confidence interval computed over bank seeds and episodes. Among $B_{\max}$, $U$, and \wmpa{}, entries at or above $95\%$ of the row maximum are shown in bold; note that $U$ is a hindsight bound rather than a deployable method. The symbol ${}^{*}$ indicates that the confidence interval excludes zero.}
 \label{tab:bank-stats}
 \centering
 \small
@@ -564,7 +614,9 @@ Every number follows the official OGBench evaluation: five goals per dataset, $5
 \section{Selection Behavior and Runtime}
 \label[appendix]{app:runtime}
 
-\Cref{tab:runtime} reports how the portfolio is used: episode length, switches per episode for \wmpa{} and \randomswitch, arbitration decisions per episode, world-model calls per environment step (dynamics; value calls are identical), the entropy of the policy-usage distribution (bits; $\log_2 6\approx2.58$ for uniform usage of a six-member bank), and wall-clock latency per environment step. Latency was measured on the evaluation nodes (AMD EPYC 9135, 8 threads, JAX on CPU, no GPU) and includes batched policy inference, dynamics and value evaluation, and the winner's action. \wmpa{} switches less often than \randomswitch{} at the same interval (it frequently re-selects the incumbent), and its usage entropy is high on the datasets with the largest gains, showing that the arbiter does not collapse to a single bank member. Evidence that within-episode composition improves success is provided separately by the oracle comparison in \cref{app:bank-stats}.
+\paragraph{Training cost.} On the same GPU slice (an H100 3g.40gb MIG partition), training the world model together with its value head takes $3.3$ hours per dataset on average, compared with $2.7$ hours for a single policy and approximately $16$ hours for a six-policy bank, a cost that the best-policy baseline also incurs because all candidates must be trained before one is kept. Test-time latency grows linearly with the bank size $M$, because the arbiter makes $ME$ model calls per environment step: the twelve-member pooled banks of \cref{app:bank-composition} run at $5$--$6$\,ms per step, roughly twice the per-arbitration latency of a six-member bank.
+
+\paragraph{Arbitration behavior.} \Cref{tab:runtime} reports how the portfolio is used: episode length, switches per episode for \wmpa{} and \randomswitch, arbitration decisions per episode, world-model calls per environment step (dynamics; value calls are identical), the entropy of the policy-usage distribution (bits; $\log_2 6\approx2.58$ for uniform usage of a six-member bank), and wall-clock latency per environment step. Latency was measured on the evaluation nodes (AMD EPYC 9135, 8 threads, JAX on CPU, no GPU) and includes batched policy inference, dynamics and value evaluation, and the winner's action. \wmpa{} switches less often than \randomswitch{} at the same interval (it frequently re-selects the incumbent), and its usage entropy is high on the datasets with the largest gains, showing that the arbiter does not collapse to a single bank member. Evidence that within-episode composition improves success is provided separately by the oracle comparison in \cref{app:bank-stats}.
  
 \begin{table}[htbp]
 \caption{Selection behavior and runtime of \wmpa{} (selected $(k,c)$) and \randomswitch{} (same $c$). ep.\ len and decisions/ep belong to \wmpa{}.}
@@ -575,173 +627,291 @@ Every number follows the official OGBench evaluation: five goals per dataset, $5
 \resizebox{\linewidth}{!}{\input{tables/runtime}}
 \end{table}
 
-% Include after the main paper's \appendix.
-% Load wmpp_theory_compact_setup.tex in the preamble.
-% Merge wmpp_theory_compact_references.bib into the main bibliography.
+% \section{When does WMPA improve upon a fixed policy?}
+% \label[appendix]{app:wmpa_theory}
 
-% \section{A Sufficient Condition for Policy-Portfolio Improvement}
-% \label[appendix]{app:wmpp-compact-theory}
+% Fix a reference policy $\pi_b$ from the frozen bank. Let $J(\pi)$ denote the probability of success by the deadline $T$ under a common evaluation distribution.
+% With commitment interval $c$, there are $N=\lceil T/c\rceil$ decision slots.
+% Let \(X_n\) denote the state--goal pair at the \(n\)-th arbitration point. For notational convenience, trajectories that succeed or terminate early are padded to the evaluation horizon; once success occurs at $k$, the success indicator $Y_{i=k, k+1, ...T}$ remains equal to one.
 
-% We give a sufficient condition for \wmpa{} to outperform the best policy in its bank. The argument combines a finite-horizon performance-difference identity \citep{kakade2002approximately} with a gap-sensitive ranking bound \citep{farahmand2011actiongap}. We retain \wmpa{}'s actual score and commitment mechanism, rather than assuming that its learned value evaluates individual bank members. The result concerns a fixed, trained arbiter, not convergence of its training procedure.
-
-% \subsection{Policy chunks and local improvement}
-% \label{app:wmpp-compact-setup}
-
-% Fix a bank $\Pi=\{\pi_1,\ldots,\pi_M\}$, a horizon $T$, and a common initial state--goal distribution. Let $Y_T$ indicate goal attainment by time $T$, so $J(\pi)=\mathbb{E}_{\pi}[Y_T]$. With commitment $c$, there are $N=\lceil T/c\rceil$ decision points at $t_n=\min\{nc,T\}$; chunk $n$ has length $c_n=t_{n+1}-t_n$. Write $X_n$ for the decision state, augmented for analysis with the goal and success and termination indicators. Terminated trajectories are padded with absorbing states. This bookkeeping does not change the deployed controller.
-
-% Using each policy's deterministic deployment mode, \wmpa{} selects
+% Let $\hat i_n(x)$ denote the member selected by \wmpa{} and $S_i(x)$ the rollout score of member $i$ (\cref{eq:score}). The \emph{predicted gain over the reference} is
 % \begin{equation}
-% \widehat\iota_n(x)\in\arg\max_i\widehat S_i(x),
-% \qquad
-% \widehat S_i(x)=\max_{1\le h\le k}\frac1E\sum_{e=1}^E
-% V_e(\widehat s_h^{i,e},g),
-% \label{eq:wmppc-score}
+%  m_n(x)=a\bigl[S_{\hat i_n(x)}(x)-S_b(x)\bigr]\geq 0.
+%  \label{eq:wmpa_predicted_gain}
 % \end{equation}
-% where $\widehat s_h^{i,e}$ is the closed-loop rollout under dynamics member $e$. A direct value head is represented by $V_e=V$ for all $e$. Ties follow a fixed rule, and the selected policy executes for $c_n$ real steps or until termination. The configured imagination horizon $k$ is unchanged, including in the final partial chunk. Denote this controller by $\widehat\pi$ and its decision-state distribution by $d_n^{\widehat\pi}$.
+% The fixed scale $a>0$ converts score differences into success-probability units without affecting the selection. Let $r_n(x)$ denote the same score difference computed with rollouts under the true dynamics, with the selected member and the value heads unchanged. Let $A_n^b(x)$ denote the \emph{true gain}, that is, the change in success probability obtained by executing the selected member for the next commitment interval and $\pi_b$ thereafter, rather than $\pi_b$ throughout. This shared continuation serves only the analysis.
 
-% Fix a reference member $\pi_b$. Define its remaining success probability and the value of one candidate chunk followed by this reference:
+% \begin{wmpatheorem}[A sufficient condition for improvement]
+% \label{thm:wmpa_improvement}
+
+% For each decision slot $n$, define the mean model and scoring
+% errors over states visited by \wmpa{} as
 % \begin{align}
-% V_n^b(x)&=\Pr(Y_T=1\mid X_n=x,\ \pi_b\text{ thereafter}),
-% \label{eq:wmppc-reference}\\
-% Q_n^{b,c}(x,i)&=\mathbb{E}\!\left[V_{n+1}^b(X_{n+1})\mid X_n=x,
-% \ \pi_i\text{ for }c_n\text{ steps}\right].
-% \label{eq:wmppc-chunk}
+%     \varepsilon_{\mathrm{model},n}
+%     &=
+%     \mathbb E_{\mathrm{WMPA}}
+%     \left[
+%         \left|m_n(X_n)-r_n(X_n)\right|
+%     \right],
+%     \notag\\
+%     \varepsilon_{\mathrm{score},n}
+%     &=
+%     \mathbb E_{\mathrm{WMPA}}
+%     \left[
+%         \left|r_n(X_n)-A_n^b(X_n)\right|
+%     \right].
+%     \label{eq:wmpa_mean_errors}
 % \end{align}
-% All candidates share the same continuation, isolating the effect of the current chunk. These are true-environment quantities for analysis, not learned critics required by \wmpa{}. In particular, $Q_n^{b,c}(x,b)=V_n^b(x)$ and $V_N^b(X_N)=Y_T$.
-
-% At a fixed $(n,x)$, abbreviate $q_i=Q_n^{b,c}(x,i)$ and $q_\star=\max_iq_i$. Define the local improvement opportunity and selection loss as
+% Provided that all expectations are finite, if the expected
+% cumulative predicted gain exceeds the cumulative model and
+% scoring errors,
 % \begin{equation}
-% G_n^b(x)=q_\star-V_n^b(x),
-% \qquad
-% L_n^b(x)=q_\star-q_{\widehat\iota_n(x)}.
-% \label{eq:wmppc-opportunity-loss}
+%     \sum_{n=0}^{N-1}
+%     \mathbb E_{\mathrm{WMPA}}[m_n(X_n)]
+%     >
+%     \sum_{n=0}^{N-1}
+%     \left(
+%         \varepsilon_{\mathrm{model},n}
+%         +
+%         \varepsilon_{\mathrm{score},n}
+%     \right),
+%     \label{eq:wmpa_improvement_condition}
 % \end{equation}
-% Both are nonnegative: the reference remains available, while \wmpa{} may fail to select the best chunk. Their difference is the advantage of the selected chunk over continuing $\pi_b$.
+% then
+% \[
+%     J(\pi_{\mathrm{WMPA}})>J(\pi_b).
+% \]
+% The same statement holds with non-strict inequalities.
+% In particular, taking $\pi_b$ to be the best fixed policy in
+% the bank gives the corresponding guarantee against every
+% bank member.
+% \end{wmpatheorem}
 
-% \begin{wmppc-lemma}[From local choices to episode success]
-% \label{lem:wmppc-identity}
-% For any reference member $\pi_b$,
+% \subsection{Proof}
+% \label{app:wmpa_theory_proof}
+
+% Let $V_n^b(x)$ denote the probability of success when $\pi_b$ is followed from $x$ at decision slot $n$; this is an analytical quantity, not a learned critic. The selected member is executed for $c_n=\min\{c,T-nc\}$ steps or until termination. Let \(Y_T\in\{0,1\}\) indicate whether the episode has reached the goal by the deadline \(T\); then $V_N^b(X_N)=Y_T$.
+
+% The next decision state depends only on the selected chunk and not on the subsequent controller.
+% Therefore,
 % \begin{equation}
-% J(\widehat\pi)-J(\pi_b)
-% =\sum_{n=0}^{N-1}\mathbb{E}_{X_n\sim d_n^{\widehat\pi}}
-% \left[G_n^b(X_n)-L_n^b(X_n)\right].
-% \label{eq:wmppc-identity}
+%  A_n^b(x)
+%  =\mathbb E_{\mathrm{WMPA}}\!\left[
+%  V_{n+1}^b(X_{n+1})\mid X_n=x\right]-V_n^b(x).
+%  \label{eq:wmpa_true_gain}
 % \end{equation}
-% \end{wmppc-lemma}
-% \begin{proof}
-% By definition, $G_n^b-L_n^b=Q_n^{b,c}(x,\widehat\iota_n(x))-V_n^b(x)$. \wmpa{} executes the selected chunk, so conditional expectation gives
-% $\mathbb{E}_{\widehat\pi}[Q_n^{b,c}(X_n,\widehat\iota_n(X_n))]
-% =\mathbb{E}_{\widehat\pi}[V_{n+1}^b(X_{n+1})]$.
-% Consequently,
-% \begin{align*}
-% \sum_n\mathbb{E}_{\widehat\pi}[G_n^b(X_n)-L_n^b(X_n)]
-% &=\sum_n\mathbb{E}_{\widehat\pi}[V_{n+1}^b(X_{n+1})-V_n^b(X_n)]\\
-% &=\mathbb{E}_{\widehat\pi}[Y_T]-\mathbb{E}[V_0^b(X_0)]
-% =J(\widehat\pi)-J(\pi_b).
-% \end{align*}
-% The intermediate values cancel. The continuation $\pi_b$ defines the comparison value; \wmpa{} need not actually follow it after the chunk.
-% \end{proof}
-
-% \subsection{How score errors cause selection loss}
-% \label{app:wmpp-compact-ranking}
-
-% For a vector $z$, let $\operatorname{osc}_i(z_i)=\max_i z_i-\min_i z_i$. Fix a common scale $a>0$, which does not change the selected index, and suppress its dependence below. Define the pairwise comparison error
-% \begin{equation}
-% \eta_n^b(x)=\operatorname{osc}_i(a\widehat S_i(x)-q_i)
-% =\max_{i,j}\left|a(\widehat S_i(x)-\widehat S_j(x))-(q_i-q_j)\right|.
-% \label{eq:wmppc-pairwise}
-% \end{equation}
-% Unlike an absolute calibration error, this quantity ignores candidate-independent additive bias. The positive scale permits a numerical comparison with success-probability differences without altering the arbiter. Small comparison error is a sufficient condition, not a calibration requirement of the algorithm.
-
-% Let $\Delta_n^b(x)=q_\star-\max_{i:q_i<q_\star}q_i$, with $\Delta_n^b(x)=+\infty$ if all candidates are optimal. This gap compares chunks from the same decision state and allows ties among optimal candidates; it is distinct from the episode-level dominance gap $D_{\mathrm{gap}}$.
-
-% \begin{wmppc-lemma}[Gap-sensitive ranking stability]
-% \label{lem:wmppc-ranking}
-% At every decision state,
-% \begin{equation}
-% L_n^b(x)\le
-% \min\{1,\eta_n^b(x)\}\,
-% \mathbf{1}\{\Delta_n^b(x)\le\eta_n^b(x)\}.
-% \label{eq:wmppc-ranking}
-% \end{equation}
-% In particular, $\eta_n^b(x)<\Delta_n^b(x)$ guarantees an optimal chunk choice.
-% \end{wmppc-lemma}
-% \begin{proof}
-% Let $i_\star\in\arg\max_iq_i$, $j=\widehat\iota_n(x)$, and $e_i=a\widehat S_i(x)-q_i$. Since $\widehat S_j\ge\widehat S_{i_\star}$,
-% \begin{equation*}
-% L_n^b=q_{i_\star}-q_j
-% =a(\widehat S_{i_\star}-\widehat S_j)+e_j-e_{i_\star}
-% \le e_j-e_{i_\star}\le\eta_n^b.
-% \end{equation*}
-% Also $L_n^b\le1$, since chunk values lie in $[0,1]$. If $L_n^b>0$, the selected candidate is strictly suboptimal, hence $L_n^b\ge\Delta_n^b$. Thus a positive loss requires $\Delta_n^b\le\eta_n^b$, proving the bound.
-% \end{proof}
-
-% \paragraph{Model error versus score--outcome mismatch.}
-% To connect this bound to \wmpa{}, let $S_h^i$ be the state after $h$ true-environment steps under $\pi_i$, with absorbing padding after termination. Define
-% \begin{equation}
-% S_i^p(x)=\max_{1\le h\le k}\frac1E\sum_{e=1}^E
-% \mathbb{E}_{p,\pi_i}[V_e(S_h^i,g)\mid X_n=x].
-% \label{eq:wmppc-true-score}
-% \end{equation}
-% This retains the same scorer and temporal aggregation but uses true dynamics. In stochastic environments, the expectation is inside the maximum; the learned ensemble is not assumed to sample the true transition law. Assume finite score expectations, and set both scores to zero at padded decision states.
-
-% Define
+% Taking expectations and summing over the decision slots cancels all intermediate reference values:
 % \begin{align}
-% \eta_{\mathrm{dyn},n}(x)&=a\operatorname{osc}_i(\widehat S_i(x)-S_i^p(x)),
-% \label{eq:wmppc-dynamics}\\
-% \eta_{\mathrm{align},n}^b(x)&=\operatorname{osc}_i(aS_i^p(x)-Q_n^{b,c}(x,i)).
-% \label{eq:wmppc-alignment}
+%  \sum_{n=0}^{N-1}\mathbb E_{\mathrm{WMPA}}[A_n^b(X_n)]
+%  &=\sum_{n=0}^{N-1}\mathbb E_{\mathrm{WMPA}}
+%        [V_{n+1}^b(X_{n+1})-V_n^b(X_n)]\notag\\
+%  &=\mathbb E_{\mathrm{WMPA}}[Y_T]-\mathbb E[V_0^b(X_0)]\notag\\
+%  &=J(\pi_{\mathrm{WMPA}})-J(\pi_b).
+%  \label{eq:wmpa_gain_identity}
 % \end{align}
-% The first term measures changes in candidate comparisons due to model error. The second measures mismatch between the true-dynamics score and the chunk's success probability, including value error, continuation mismatch, and the use of a trajectory maximum rather than the commitment endpoint. Training discounts and remaining-time mismatch also enter this term.
-
-% For each candidate,
-% $a\widehat S_i-q_i=a(\widehat S_i-S_i^p)+(aS_i^p-q_i)$.
-% Applying the triangle inequality to every candidate pair gives
+% At each decision state, the triangle inequality gives
+% \[
+%     A_n^b(x)
+%     \geq
+%     m_n(x)
+%     -
+%     |m_n(x)-r_n(x)|
+%     -
+%     |r_n(x)-A_n^b(x)|.
+% \]
+% Taking expectations, using \eqref{eq:wmpa_mean_errors},
+% and substituting into \eqref{eq:wmpa_gain_identity} yields
 % \begin{equation}
-% \eta_n^b(x)\le\eta_{\mathrm{dyn},n}(x)+\eta_{\mathrm{align},n}^b(x)
-% =: \mathcal E_n^b(x).
-% \label{eq:wmppc-decomposition}
+%     J(\pi_{\mathrm{WMPA}})-J(\pi_b)
+%     \geq
+%     \sum_{n=0}^{N-1}
+%     \left(
+%         \mathbb E_{\mathrm{WMPA}}[m_n(X_n)]
+%         -
+%         \varepsilon_{\mathrm{model},n}
+%         -
+%         \varepsilon_{\mathrm{score},n}
+%     \right).
+%     \label{eq:wmpa_improvement_bound}
 % \end{equation}
-% Thus, exact dynamics does not by itself guarantee a correct ranking: the alignment term may remain large.
+% Under \eqref{eq:wmpa_improvement_condition}, if the right-hand
+% side is positive, then strict improvement is guaranteed. The same
+% argument gives no degradation when it is nonnegative.
+% \hfill$\square$
 
-% \subsection{A sufficient condition for improvement}
-% \label{app:wmpp-compact-guarantee}
+% \subsection{Estimating the errors in practice}
+% \label{app:wmpa_theory_errors}
 
-% \begin{wmppc-theorem}[Ranking-sensitive performance guarantee]
-% \label{thm:wmppc-main}
-% For any reference member $\pi_b$ and any fixed $a>0$, define
-% \begin{equation}
-% B_n^b(x)=\min\{1,\mathcal E_n^b(x)\}\,
-% \mathbf{1}\{\Delta_n^b(x)\le\mathcal E_n^b(x)\}.
-% \label{eq:wmppc-penalty}
-% \end{equation}
-% Then
-% \begin{equation}
-% J(\widehat\pi)-J(\pi_b)
-% \ge\sum_{n=0}^{N-1}\mathbb{E}_{X_n\sim d_n^{\widehat\pi}}
-% \left[G_n^b(X_n)-B_n^b(X_n)\right].
-% \label{eq:wmppc-main}
-% \end{equation}
-% \end{wmppc-theorem}
-% \begin{proof}
-% If $\Delta_n^b>\mathcal E_n^b\ge\eta_n^b$, Lemma~\ref{lem:wmppc-ranking} gives $L_n^b=0=B_n^b$. Otherwise,
-% $L_n^b\le\min\{1,\eta_n^b\}\le\min\{1,\mathcal E_n^b\}=B_n^b$.
-% Substituting $L_n^b\le B_n^b$ into Lemma~\ref{lem:wmppc-identity} proves the claim.
-% \end{proof}
+% Both error terms in Theorem~\ref{thm:wmpa_improvement} can be estimated empirically in practical applications of \wmpa{}. On the arbitration states $X_n$ visited by
+% \wmpa{} at decision slot $n$ (these states serve only to estimate
+% the errors on evaluation episodes, which can be drawn, for example,
+% from validation data), we first replay the selected and reference
+% policies through the true simulator for the same $k=c$ steps and
+% score the resulting trajectories with the same value function.
+% The absolute difference between the score gap under the learned
+% model, $m_n(X_n)$, and that under the simulator, $r_n(X_n)$, is averaged
+% to estimate the model-induced comparison error,
+% \[
+%     \varepsilon_{\mathrm{model},n}
+%     =
+%     \mathbb E_{\mathrm{WMPA}}
+%     \left[
+%         \left|m_n(X_n)-r_n(X_n)\right|
+%     \right].
+% \]
 
-% Let $b_\star\in\arg\max_bJ(\pi_b)$ be the best policy, and write
-% $\mathcal A_b=\sum_n\mathbb{E}_{d_n^{\widehat\pi}}[G_n^b]$
-% and $\mathcal R_b=\sum_n\mathbb{E}_{d_n^{\widehat\pi}}[B_n^b]$.
-% The theorem yields the sufficient improvement condition
-% \begin{equation}
-% \mathcal A_{b_\star}>\mathcal R_{b_\star}
-% \quad\Longrightarrow\quad
-% J(\widehat\pi)>\max_bJ(\pi_b).
-% \label{eq:wmppc-sufficient}
-% \end{equation}
-% In words, \wmpa{} is guaranteed to improve when the bank's cumulative local improvement opportunity exceeds the error penalty incurred by arbitration. Errors below the local candidate gap contribute no penalty. Strict improvement additionally requires useful alternatives to the reference policy.
+% We then execute the selected policy for one commitment interval
+% and the reference policy thereafter, and compare the resulting
+% empirical success probability with that of following the reference
+% throughout. This comparison estimates the true success advantage $A_n^b(X_n)$.
+% The absolute discrepancy between this advantage and the simulator score gap $r_n(X_n)$
+% is averaged to estimate the scoring error,
+% \[
+%     \varepsilon_{\mathrm{score},n}
+%     =
+%     \mathbb E_{\mathrm{WMPA}}
+%     \left[
+%         \left|r_n(X_n)-A_n^b(X_n)\right|
+%     \right].
+% \]
 
-% \paragraph{Scope.}
-% This is a sufficient, not necessary, condition: a loose bound need not certify a successful controller. All expectations concern states visited by \wmpa{}, not the offline data distribution. The training objectives do not guarantee small comparison or alignment errors on these states. The result therefore characterizes when a trained arbiter improves upon a fixed bank member, without claiming an unconditional training guarantee or equating local opportunities with static per-episode oracle headroom.
+% % With these two estimated errors, Theorem~\ref{thm:wmpa_improvement} can be applied in practice to check whether \wmpa{} is guaranteed to outperform every policy in its frozen bank.
+\section{When Do Imagined Rollouts Support Useful Arbitration?}
+\label[appendix]{app:wmpa_theory}
 
+Fix a commitment interval $c$, and let $\pi_b$ be the fixed bank member
+with the highest success probability under the evaluation distribution.
+Write $J(\pi)$ for the probability that policy $\pi$ reaches the goal by
+the deadline $T$. A decision state $x$ includes the environment state,
+goal, remaining time, and success or termination status. Success and
+termination are absorbing, and the final commitment interval is shortened
+to the remaining episode length. There are $N=\lceil T/c\rceil$ decision
+slots, with absorbing trajectories padded to the deadline.
+
+The \emph{chunk advantage} of member $i$ relative to $\pi_b$ is
+\begin{equation}
+    A_i(x)
+    = \Pr\!\left(\text{success}\mid x,\
+        \pi_i\text{ for one chunk, then }\pi_b\right)
+    - \Pr\!\left(\text{success}\mid x,\
+        \pi_b\text{ throughout}\right).
+    \label{eq:wmpa_chunk_advantage}
+\end{equation}
+This quantity measures the benefit of using member $i$ for the next
+chunk while holding the subsequent controller fixed. Since $A_b(x)=0$,
+the largest available advantage,
+\begin{equation}
+    G(x)=\max_i A_i(x)\geq 0,
+    \label{eq:wmpa_opportunity}
+\end{equation}
+measures the opportunity to improve on the best fixed member at that
+decision point.
+
+Let $S_i(x)$ be the imagined-rollout score used by \wmpa{}, and let
+$S_i^\star(x)$ be the expected value of the same complete scoring rule
+under the true dynamics, with the learned value head unchanged. In
+particular, the expectation is taken after applying the rule's
+aggregation over ensemble members and maximum over rollout steps. Any
+sampling error in the computed score $S_i(x)$ is included in the
+discrepancy below. Define
+\begin{equation}
+    e(x)=\max_i\left|S_i(x)-S_i^\star(x)\right|.
+    \label{eq:wmpa_score_discrepancy}
+\end{equation}
+Thus, $e(x)$ measures the largest discrepancy between the computed and
+true-dynamics scores across the bank. After success or termination, set all
+advantages and scores to zero.
+
+\begin{wmpaassumption}[Separation of inferior choices]
+\label{ass:wmpa_score_separation}
+For some tolerance $0\leq\delta<1$ and margin $\Delta>0$, at every
+active decision state visited by \wmpa{},
+\begin{equation}
+    A_i(x)<G(x)-\delta
+    \quad\Longrightarrow\quad
+    S_i^\star(x)\leq\max_j S_j^\star(x)-\Delta.
+    \label{eq:wmpa_score_separation}
+\end{equation}
+\end{wmpaassumption}
+
+The assumption requires the value head, when applied to true-dynamics
+rollouts, to separate any member whose advantage is more than $\delta$
+below the best by a score margin of at least $\Delta$. It does not require
+correct ordering among members whose advantages are within $\delta$ of
+the best. The tolerance is measured in success-probability units, whereas
+the margin is measured in the scorer's own units.
+
+\begin{wmpatheorem}[Improvement through robust selection]
+\label{thm:wmpa_robust_selection}
+Under Assumption~\ref{ass:wmpa_score_separation}, let $X_n$ be the decision
+state at slot $n$ under \wmpa{}, and let $\mathcal A_n$ be the event that
+$X_n$ is active. Then
+\begin{equation}
+\begin{split}
+    J(\pi_{\mathrm{WMPA}})-J(\pi_b)
+    \geq \sum_{n=0}^{N-1}
+    \biggl(&\mathbb E_{\mathrm{WMPA}}[G(X_n)]
+    -\delta\Pr_{\mathrm{WMPA}}(\mathcal A_n)\\
+    &-(1-\delta)\Pr_{\mathrm{WMPA}}\!\left(
+        \mathcal A_n,\,
+        e(X_n)\geq\frac{\Delta}{2}\right)\biggr).
+\end{split}
+\label{eq:wmpa_robust_improvement}
+\end{equation}
+In particular, a positive right-hand side guarantees improvement over
+every fixed bank member.
+\end{wmpatheorem}
+
+The bound compares the available improvement with two sources of
+selection loss at active decision slots: the tolerated difference $\delta$
+from the best chunk advantage, and decisions at which score error is
+large enough to overturn the separation margin. Errors smaller than half
+the margin cannot cause a selection more than $\delta$ below the best
+advantage.
+
+\begin{proof}
+At an active decision state $x$, let $\hat i$ maximize the computed score
+and let $j$ maximize the true-dynamics score. Since
+$S_{\hat i}(x)\geq S_j(x)$,
+\begin{equation}
+    S_j^\star(x)-S_{\hat i}^\star(x)\leq 2e(x).
+    \label{eq:wmpa_margin_stability}
+\end{equation}
+If $e(x)<\Delta/2$, Assumption~\ref{ass:wmpa_score_separation} implies
+$A_{\hat i}(x)\geq G(x)-\delta$. Otherwise,
+$G(x)-A_{\hat i}(x)\leq 1$, since the common reference term cancels and
+the remaining difference is between two success probabilities.
+At an absorbing decision state, all advantages are zero. Consequently,
+for every decision state $x$,
+\begin{equation}
+    A_{\hat i}(x)
+    \geq G(x)-\delta\mathbf{1}\{x\text{ is active}\}
+    -(1-\delta)\mathbf{1}\!\left\{
+        x\text{ is active},\ e(x)\geq\frac{\Delta}{2}\right\}.
+    \label{eq:wmpa_local_selection_bound}
+\end{equation}
+
+Let $V_b(x)$ denote the probability of success if $\pi_b$ is followed
+from $x$ onward. By definition, the expected change in $V_b$ across a
+chunk executed by member $i$ is $A_i(x)$. Summing these changes along
+\wmpa{}'s trajectory cancels the intermediate reference values. At the
+deadline, $V_b$ equals the success indicator; its expectation at the
+initial state equals $J(\pi_b)$. Therefore,
+\begin{equation}
+    J(\pi_{\mathrm{WMPA}})-J(\pi_b)
+    =\sum_{n=0}^{N-1}
+    \mathbb E_{\mathrm{WMPA}}[A_{\hat i_n}(X_n)],
+    \label{eq:wmpa_advantage_identity}
+\end{equation}
+where $\hat i_n$ is the member selected at slot $n$. Taking expectations
+in~\eqref{eq:wmpa_local_selection_bound} and summing proves the result.
+\end{proof}
+
+The result identifies three requirements for useful arbitration: the bank
+must offer locally advantageous alternatives, the value head must
+separate substantially inferior choices under true dynamics, and score
+errors must be small relative to that separation. Accurate dynamics
+alone are insufficient if the value head favors unhelpful outcomes.
+Conversely, imperfect imagined rollouts can support reliable selection
+when their score errors preserve the relevant margin.
 \end{document}

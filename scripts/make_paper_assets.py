@@ -698,7 +698,7 @@ def main(_):
     plt.close(fig)
 
     # (2) regimes: gain vs complementarity headroom of the static oracle
-    fig, ax = plt.subplots(figsize=(5.5, 2.1))  # full text width, flat: placed with width=\linewidth
+    fig, ax = plt.subplots(figsize=(5.5, 2.25))  # full text width, flat: placed with width=\linewidth
     xs = np.array([stats[e]['union'] - stats[e]['obest'] for e in envs])
     ys = np.array([stats[e]['dW'] for e in envs])
     ax.plot([0, max(xs.max(), ys.max()) + 2], [0, max(xs.max(), ys.max()) + 2], ls='--', lw=0.8, color='#9a9a9a')
@@ -707,7 +707,10 @@ def main(_):
         if idx:
             ax.scatter(xs[idx], ys[idx], s=22, color=C_FAMILY[fam], edgecolor='white', linewidth=0.6,
                        zorder=3, label=fam)
-    ax.legend(loc='center right', fontsize=6.5, frameon=False, handletextpad=0.3, borderaxespad=0.6, ncol=4, columnspacing=1.0)
+    # boxed legend so its markers are not read as data points near the y=x line
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), fontsize=6.5, frameon=True, fancybox=False, framealpha=1.0,
+              edgecolor='#bfbfbf', facecolor='white', handletextpad=0.3, borderaxespad=0.3, borderpad=0.4, ncol=4,
+              columnspacing=1.2).get_frame().set_linewidth(0.6)  # above the axes: never overlaps a point or the y=x line
     labels_on = {e for e in envs if abs(stats[e]['dW']) > 4 or (stats[e]['union'] - stats[e]['obest']) > 12}
     # (dx pt, dy pt, ha): the crowded low-headroom cluster is labelled to the LEFT of the y axis
     # (xlim starts at -6.5 to make room) so no label covers a marker or another label.
@@ -721,12 +724,12 @@ def main(_):
                         xytext=(dx, dy), textcoords='offset points', fontsize=6, color='#333', ha=ha)
     ax.set_xlim(-6.5, max(xs.max(), ys.max()) + 2)
     ax.axhline(0, color='#555', lw=0.6)
-    ax.set_xlabel('Oracle headroom over best policy (points)')
+    ax.set_xlabel('Per-episode oracle headroom over best policy (points)')
     ax.set_ylabel('WMPA gain (points)')
     ax.grid(color='#e6e6e6', lw=0.6)
     ax.set_axisbelow(True)
     fig.tight_layout()
-    fig.savefig(os.path.join(fdir, 'regimes.pdf'))
+    fig.savefig(os.path.join(fdir, 'regimes.pdf'), bbox_inches='tight', pad_inches=0.02)
     plt.close(fig)
 
     # (3) k=c profiles, small multiples

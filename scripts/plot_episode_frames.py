@@ -33,7 +33,7 @@ args = ap.parse_args()
 ORDER = ['gcbc', 'gcivl', 'gciql', 'qrl', 'crl', 'hiql']
 LABEL = dict(gcbc='GCBC', gcivl='GCIVL', gciql='GCIQL', qrl='QRL', crl='CRL', hiql='HIQL')
 COL = dict(zip(ORDER, ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7']))
-# pastel fills requested for the frame figure (draw.io style); text stays dark on them
+# pastel fills (draw.io style) so the badges match the teaser figure; text stays dark on them
 COL.update(hiql='#E1D5E7', gciql='#FFE6CC', gcivl='#D5E8D4')
 EDGE = dict(hiql='#9673A6', gciql='#D79B00', gcivl='#82B366')
 INK, INK2, MUTED, GRID = '#0b0b0b', '#52514e', '#a8a7a1', '#e6e5e0'
