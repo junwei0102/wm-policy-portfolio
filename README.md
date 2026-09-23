@@ -69,7 +69,8 @@ datasets are not included; every script takes its paths as flags
    --env_name=... --wm_dir=... --policy_root=... --seeds=0 --best_fixed=gciql-sd0
    --score_mode=value --score_agg=max --horizon=10 --commit=10
    --episodes_per_task=50 --out_tag=og50`. `--critic_scorer=gciql --critic_kc=10`
-   scores with the direct value; `--random_commit` and `--critic_select_commit`
+   scores with the direct value, `--kxc=10:5` / `--critic_kxc=10:5` any other
+   $(k,c)$ cell; `--random_commit` and `--critic_select_commit`
    run the random and Q-select controls, `--mpc_n=6 --mpc_sigma=0.2 --mpc_k=<k>
    --mpc_commit=1` the every-step action-level MPC; `--episode_range=50:100`
    evaluates the held-out episodes used for interval selection.
@@ -81,6 +82,12 @@ datasets are not included; every script takes its paths as flags
    aggregates per-dataset success and paired contrasts.
    `scripts/collect_oracle.py` and `scripts/run_wm_diagnostics.py` produce the
    real-simulator branch diagnostics.
+5. **Value-head selection** (offline, before any evaluation episode):
+   `scripts/crossing_criterion.py --env_name=... --pairing=random
+   --label=firstarrival --chunk_start=50 --n_chunks=1 --min_margin=20` scores
+   each head by whether it ranks higher the state whose trajectory reaches a
+   shared goal sooner, on one held-out 1M chunk of the OGBench 100M release
+   (`--data_root`).
 
 ## Statistics
 

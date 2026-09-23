@@ -41,6 +41,7 @@ flags.DEFINE_integer('horizon', None, 'Scoring horizon H (default: WM training h
 flags.DEFINE_integer('commit', None, 'Commitment C (default: same as horizon).')
 flags.DEFINE_string('variants', None, 'Subset of 2x2 cells to run (comma-separated names).')
 flags.DEFINE_string('kc_sweep', None, 'Extra (k,k) diagonal cells, e.g. "5,25,50".')
+flags.DEFINE_string('kxc', None, 'Extra arbitrary (k,c) cells as "k:c" pairs, e.g. "10:5,5:1" (variant score{k}_commit{c}); select them with --variants.')
 flags.DEFINE_string('out_tag', None, 'Suffix for the output dir (avoid overwriting).')
 flags.DEFINE_enum(
     'score_mode',
@@ -80,6 +81,7 @@ flags.DEFINE_string(
     'critic{k}_commit{k} for every k in --critic_kc.',
 )
 flags.DEFINE_string('critic_kc', None, 'k=c cells for the --critic_scorer variants, e.g. "5,100".')
+flags.DEFINE_string('critic_kxc', None, 'Off-diagonal (k,c) cells for the --critic_scorer variants as "k:c" pairs, e.g. "1:10,10:1" (variant critic{k}_commit{c}).')
 flags.DEFINE_string('critic_select_commit', None, 'Re-selection intervals c for the model-free Q-select control qsel_commit{c}: i*=argmax_i min_j Q_j(s, pi_i(s,g), g) of the --critic_scorer member, no rollout.')
 # Sampling-MPC baseline on the best fixed policy (world-model search WITHOUT
 # a portfolio): N Gaussian perturbations of the policy action, imagined k
@@ -221,6 +223,9 @@ def main(_):
     if FLAGS.kc_sweep:
         for h in (int(x) for x in FLAGS.kc_sweep.split(',')):
             variant_specs[f'score{h}_commit{h}'] = (h, h)
+    for spec in (FLAGS.kxc.split(',') if FLAGS.kxc else []):
+        k_, c_ = (int(x) for x in spec.split(':'))
+        variant_specs[f'score{k_}_commit{c_}'] = (k_, c_)
     # --variants=none runs no world-model planner (e.g. a Random-only job).
     if FLAGS.variants == 'none':
         requested = []
@@ -301,6 +306,17 @@ def main(_):
                 requested.append(nm)
             if FLAGS.abl_only:  # keep only the ablation variants (the plain cell already exists in the sweep)
                 requested.remove(name); methods.pop(name); counters.pop(name)
+        # arbitrary (k, c) cells of the same critic scorer (the (k,c) sensitivity grid on the puzzles)
+        for spec in (FLAGS.critic_kxc.split(',') if FLAGS.critic_kxc else []):
+            k, c = (int(x) for x in spec.split(':'))
+            name = f'critic{k}_commit{c}'
+            assert name not in methods, name
+            variant_specs[name] = (k, c)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=c, progress_fn=progress_fn,
+                                          score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg,
+                                          critic_fn=critic_fn)
+            requested.append(name)
         # model-free control: the same member's twin-Q critic ranks each candidate's proposed action at the current state
         for c in (int(x) for x in FLAGS.critic_select_commit.split(',')) if FLAGS.critic_select_commit else []:
             name = f'qsel_commit{c}'
