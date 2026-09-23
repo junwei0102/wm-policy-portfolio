@@ -34,7 +34,8 @@ flags.DEFINE_string('main_tags', 'og50,og50k5,og50r1,og50cr', 'sweep tags (metri
 flags.DEFINE_string('qv_tags', 'og50qv,og50qv2,og50qv3', 'direct-value (critic) runs on metric-value datasets.')
 flags.DEFINE_string('qsel_tags', 'og50qsel,og50qsel2,og50qsel3', 'Q-select test runs (qsel_commit{c}).')
 flags.DEFINE_string('qsel_val_tag', 'og50qselval', 'Q-select held-out runs (episodes 50-99).')
-flags.DEFINE_string('kc_tag', 'og50kc', 'off-diagonal (1,k)/(k,1) runs.')
+flags.DEFINE_string('kc_tag', 'og50kc,og50kc2', 'comma list of tags holding the off-diagonal (1,k)/(k,1) runs.')
+flags.DEFINE_integer('kc_grid_k', 5, 'Second corner of the k/c grid for datasets whose reported cell is already (1,1) (the mazes); their (k,k) corner comes from the sweep tags.')
 flags.DEFINE_string('fixed_tag', 'og50fx', '')
 flags.DEFINE_string('mpc_tag', 'og50mpcf', '')
 flags.DEFINE_string('out', '/scratch/jwquan/wmpp/planner_eval/mechanism_report', 'output stem (.md/.json).')
@@ -69,11 +70,13 @@ def summary(env_dir, s, tag):
 
 
 def calls(env_dir, tag, var):
-    """Mean over seeds of dynamics/value calls per environment step of `var` under `tag`; None if missing."""
+    """Mean over seeds of dynamics/value calls per environment step of `var`; None if missing.
+    `tag` may be a comma-separated list, in which case the first tag holding `var` wins."""
     d, v = [], []
     for s in SEEDS:
-        j = summary(env_dir, s, tag)
-        if not j or var not in j.get('model_calls', {}):
+        j = next((x for x in (summary(env_dir, s, t) for t in str(tag).split(','))
+                  if x and var in x.get('model_calls', {})), None)
+        if not j:
             return None
         d.append(j['model_calls'][var]['dynamics_per_env_step'])
         v.append(j['model_calls'][var]['value_per_env_step'])
@@ -170,24 +173,28 @@ def main(_):
     md += deltas_md + curves_md
 
     # ---------------- B. k/c decoupling ----------------
-    md.append('\n## B. Imagination horizon k vs commitment c (metric-value datasets)\n')
+    md.append('\n## B. Imagination horizon k vs commitment c (all datasets)\n')
     md.append('Budget is NOT equalized across cells: dynamics calls per environment step = M·E·k/c (18·k/c). '
-              'Success ± hw; calls per env step in parentheses (dynamics / value).\n')
+              'Each grid uses the dataset\'s own value head (metric, or the direct GCIQL head on the puzzles). '
+              'The mazes report (1,1), so their second corner is k=%d, marked †. '
+              'Success ± hw; calls per env step in parentheses (dynamics / value).\n' % FLAGS.kc_grid_k)
     md.append('| dataset | (1,1) | (1,k) | (k,1) | (k,k) | horizon @ c=k: (k,k)−(1,k) | horizon @ c=1: (k,1)−(1,1) | commitment @ k: (k,k)−(k,1) | commitment @ k=1: (1,k)−(1,1) |')
     md.append('|---|---|---|---|---|---|---|---|---|')
     for env in envs:
         x = report[env]
-        k = x['selected_k']
-        if (x.get('validation') or {}).get('scorer') == 'critic':
-            continue  # direct-value families: grid not requested
+        sel_k = x['selected_k']
+        # The grid needs two distinct corners; a dataset whose reported cell is (1,1)
+        # (the mazes) borrows the next family interval as its k.
+        k = sel_k if sel_k > 1 else FLAGS.kc_grid_k
+        pref = 'critic' if (x.get('validation') or {}).get('scorer') == 'critic' else 'score'
         env_dir = os.path.join(FLAGS.eval_root, env)
         main_rows = {s: merged(env_dir, s, FLAGS.main_tags.split(',')) for s in SEEDS}
-        kc = {s: rows_by_policy(env_dir, s, FLAGS.kc_tag) for s in SEEDS}
+        kc = {s: merged(env_dir, s, FLAGS.kc_tag.split(',')) for s in SEEDS}
         cells = {
-            (1, 1): (all_seeds(lambda s: main_rows[s].get('score1_commit1')), 'og50'),
-            (k, k): (all_seeds(lambda s: main_rows[s].get(f'score{k}_commit{k}')), 'og50'),
-            (1, k): (all_seeds(lambda s: kc[s].get(f'score1_commit{k}')), FLAGS.kc_tag),
-            (k, 1): (all_seeds(lambda s: kc[s].get(f'score{k}_commit1')), FLAGS.kc_tag),
+            (1, 1): (all_seeds(lambda s: main_rows[s].get(f'{pref}1_commit1')), FLAGS.main_tags),
+            (k, k): (all_seeds(lambda s: main_rows[s].get(f'{pref}{k}_commit{k}')), FLAGS.main_tags),
+            (1, k): (all_seeds(lambda s: kc[s].get(f'{pref}1_commit{k}')), FLAGS.kc_tag),
+            (k, 1): (all_seeds(lambda s: kc[s].get(f'{pref}{k}_commit1')), FLAGS.kc_tag),
         }
         if cells[(k, k)][0] is None:  # no diagonal rows under the sweep tags (e.g. a dataset run under another tag)
             print(f'[mechanism] {env}: no (k,k) rows for the k/c grid, skipped')
@@ -198,7 +205,7 @@ def main(_):
             if rows is None or any(len(rows[s]) != n_ref for s in SEEDS):
                 g[f'{kk},{cc}'] = None
                 continue
-            g[f'{kk},{cc}'] = dict(mean=seed_mean(rows), hw=rows_hw(rows), calls=calls(env_dir, tag, f'score{kk}_commit{cc}'),
+            g[f'{kk},{cc}'] = dict(mean=seed_mean(rows), hw=rows_hw(rows), calls=calls(env_dir, tag, f'{pref}{kk}_commit{cc}'),
                                    expected_dyn=18.0 * kk / cc)
         def con(a, b):
             ra, rb = cells[a][0], cells[b][0]
@@ -207,11 +214,11 @@ def main(_):
             return contrast(ra, rb, FLAGS.n_boot, rng)
         cons = {'horizon_at_ck': con((k, k), (1, k)), 'horizon_at_c1': con((k, 1), (1, 1)),
                 'commit_at_kk': con((k, k), (k, 1)), 'commit_at_k1': con((1, k), (1, 1))}
-        out[env]['B'] = dict(k=k, grid=g, contrasts=cons)
+        out[env]['B'] = dict(k=k, selected_k=sel_k, scorer=pref, grid=g, contrasts=cons)
         gc = lambda key: '--' if g.get(key) is None else (f"{100 * g[key]['mean']:.0f} ± {g[key]['hw']:.0f}" +
                                                           (f" ({g[key]['calls']['dyn']:.1f}/{g[key]['calls']['val']:.1f})" if g[key]['calls'] else ''))
         cc_ = lambda key: '--' if cons[key] is None else fmt_ci(cons[key])
-        md.append(f"| {short(env)} (k={k}) | {gc('1,1')} | {gc(f'1,{k}')} | {gc(f'{k},1')} | {gc(f'{k},{k}')} | "
+        md.append(f"| {short(env)} (k={k}{'†' if k != sel_k else ''}, {pref}) | {gc('1,1')} | {gc(f'1,{k}')} | {gc(f'{k},1')} | {gc(f'{k},{k}')} | "
                   f"{cc_('horizon_at_ck')} | {cc_('horizon_at_c1')} | {cc_('commit_at_kk')} | {cc_('commit_at_k1')} |")
 
     # ---------------- C. MPC restated ----------------

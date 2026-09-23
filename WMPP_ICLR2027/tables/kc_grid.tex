@@ -1,0 +1,18 @@
+\begin{tabular}{lcl|ccc|ccc|ccc}
+\toprule
+ & & & \multicolumn{3}{c|}{success rate (\%)} & \multicolumn{3}{c|}{switches per episode} & \multicolumn{3}{c}{latency (ms per step)} \\
+Dataset & \bestfixed{} & $k$ & $c{=}1$ & $c{=}5$ & $c{=}10$ & $c{=}1$ & $c{=}5$ & $c{=}10$ & $c{=}1$ & $c{=}5$ & $c{=}10$ \\
+\midrule
+\multirow{3}{*}{\texttt{cube-double-play}} & \multirow{3}{*}{$36 \pm 7$} & $1$ & $63 \pm 4$ &  &  & $147$ &  &  & $3.4$ &  &  \\
+ &  & $5$ & $65 \pm 4$ & \underline{$69 \pm 3$} &  & $107$ & $38$ &  & $16.5$ & $2.6$ &  \\
+ &  & $10$ & $64 \pm 3$ & $75 \pm 3$ & $73 \pm 4$ & $90$ & $30$ & $19$ & $26.3$ & $5.6$ & $2.5$ \\
+\midrule
+\multirow{3}{*}{\texttt{scene-play}} & \multirow{3}{*}{$52 \pm 5$} & $1$ & $93 \pm 3$ &  &  & $135$ &  &  & $3.8$ &  &  \\
+ &  & $5$ & $93 \pm 2$ & $92 \pm 2$ &  & $94$ & $35$ &  & $15.5$ & $2.9$ &  \\
+ &  & $10$ & $89 \pm 3$ & $93 \pm 3$ & \underline{$87 \pm 4$} & $85$ & $29$ & $21$ & $31.4$ & $6.3$ & $2.9$ \\
+\midrule
+\multirow{3}{*}{\texttt{puzzle-4x4-play}} & \multirow{3}{*}{$24 \pm 5$} & $1$ & $50 \pm 6$ &  &  & $231$ &  &  & $13.9$ &  &  \\
+ &  & $5$ & $52 \pm 11$ & $53 \pm 6$ &  & $167$ & $56$ &  & $23.2$ & $4.8$ &  \\
+ &  & $10$ & $55 \pm 8$ & $54 \pm 10$ & \underline{$51 \pm 8$} & $131$ & $49$ & $29$ & $44.5$ & $6.8$ & $3.7$ \\
+\bottomrule
+\end{tabular}

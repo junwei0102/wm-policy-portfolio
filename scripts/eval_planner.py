@@ -41,6 +41,7 @@ flags.DEFINE_integer('horizon', None, 'Scoring horizon H (default: WM training h
 flags.DEFINE_integer('commit', None, 'Commitment C (default: same as horizon).')
 flags.DEFINE_string('variants', None, 'Subset of 2x2 cells to run (comma-separated names).')
 flags.DEFINE_string('kc_sweep', None, 'Extra (k,k) diagonal cells, e.g. "5,25,50".')
+flags.DEFINE_string('kxc', None, 'Extra arbitrary (k,c) cells as "k:c" pairs, e.g. "10:5,5:1" (variant score{k}_commit{c}); select them with --variants.')
 flags.DEFINE_string('out_tag', None, 'Suffix for the output dir (avoid overwriting).')
 flags.DEFINE_enum(
     'score_mode',
@@ -81,6 +82,7 @@ flags.DEFINE_string(
     'critic{k}_commit{k} for every k in --critic_kc.',
 )
 flags.DEFINE_string('critic_kc', None, 'k=c cells for the --critic_scorer variants, e.g. "5,100".')
+flags.DEFINE_string('critic_kxc', None, 'Off-diagonal (k,c) cells for the --critic_scorer variants as "k:c" pairs, e.g. "1:10,10:1" (variant critic{k}_commit{c}).')
 flags.DEFINE_string('critic_select_commit', None, 'Re-selection intervals c for the model-free Q-select control qsel_commit{c}: i*=argmax_i min_j Q_j(s, pi_i(s,g), g) of the --critic_scorer member, no rollout.')
 # Sampling-MPC baseline on the best fixed policy (world-model search WITHOUT
 # a portfolio): N Gaussian perturbations of the policy action, imagined k
@@ -119,6 +121,9 @@ flags.DEFINE_string('abl_ens', None, 'Comma-separated ensemble reductions (min,l
 flags.DEFINE_bool('abl_only', False, 'With --abl_agg/--abl_ens: do not run the plain requested variants themselves (they exist elsewhere).')
 flags.DEFINE_string('stall_window', None, 'Comma-separated windows m of the no-model stall-restart controller (variant stall_w<m>).')
 flags.DEFINE_float('stall_eps', 0.05, 'Stall threshold: normalised displacement over the window below which the policy is restarted.')
+flags.DEFINE_string('stall_guard', None, 'Comma list of "m:h" stall guards ADDED as variants <v>_guard_m<m>_h<h> of every requested WMPP '
+                    'variant (metric and critic scorers): when the real observation moved less than --stall_eps over the last m env '
+                    'steps, the policies executed in that window are excluded from the argmax for h env steps. No extra model calls.')
 flags.DEFINE_string('sim_kc', None, 'Comma-separated diagonal cells k=c to run with TRUE-simulator branches instead of the WM (variant sim_score<k>_commit<k>).')
 flags.DEFINE_string('bank_algos', None, 'Comma-separated algorithm families to keep in the bank (default: all).')
 flags.DEFINE_string('bank_exclude', None, 'Comma-separated bank policy names to drop (e.g. the best policy).')
@@ -231,6 +236,9 @@ def main(_):
     if FLAGS.kc_sweep:
         for h in (int(x) for x in FLAGS.kc_sweep.split(',')):
             variant_specs[f'score{h}_commit{h}'] = (h, h)
+    for spec in (FLAGS.kxc.split(',') if FLAGS.kxc else []):
+        k_, c_ = (int(x) for x in spec.split(':'))
+        variant_specs[f'score{k_}_commit{c_}'] = (k_, c_)
     # --variants=none runs no world-model planner (e.g. a Random-only job).
     if FLAGS.variants == 'none':
         requested = []
@@ -251,6 +259,7 @@ def main(_):
             methods[name] = load_student(run_dir, epoch, decode=decode)
             extra[name]['student'] = dict(methods[name].config)
     explore = [int(x) for x in FLAGS.explore_every.split(',')] if FLAGS.explore_every else [None]
+    guards = [tuple(int(v) for v in x.split(':')) for x in FLAGS.stall_guard.split(',')] if FLAGS.stall_guard else []
     plain = list(requested)
     requested = []
     for base in plain:
@@ -291,6 +300,14 @@ def main(_):
             methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=c, progress_fn=progress_fn,
                                           score_mode=FLAGS.score_mode, score_agg=FLAGS.score_agg, ens_agg=ens)
             requested.append(name)
+        for m, h in guards:
+            name = f'{base}_guard_m{m}_h{h}'
+            variant_specs[name] = (k, c)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=c, progress_fn=progress_fn,
+                                          score_mode=FLAGS.score_mode, score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg,
+                                          stall_guard=(m, h), stall_eps=FLAGS.stall_eps, log_decisions=FLAGS.dump_decisions)
+            requested.append(name)
 
     critic_name, critic_fn, qsel_fn = None, None, None
     if FLAGS.critic_scorer == 'wm':
@@ -330,8 +347,26 @@ def main(_):
                 methods[nm] = RolloutRanker(wm, bank, counters[nm], horizon=k, replan_every=k, progress_fn=progress_fn,
                                             score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=ens, critic_fn=critic_fn)
                 requested.append(nm)
+            for m, h in guards:
+                nm = f'{name}_guard_m{m}_h{h}'; variant_specs[nm] = (k, k); counters[nm] = TransitionCounter()
+                methods[nm] = RolloutRanker(wm, bank, counters[nm], horizon=k, replan_every=k, progress_fn=progress_fn,
+                                            score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg, critic_fn=critic_fn,
+                                            stall_guard=(m, h), stall_eps=FLAGS.stall_eps, log_decisions=FLAGS.dump_decisions)
+                requested.append(nm)
             if FLAGS.abl_only:  # keep only the ablation variants (the plain cell already exists in the sweep)
                 requested.remove(name); methods.pop(name); counters.pop(name)
+        # off-diagonal (k, c) cells of the same critic scorer: the 2x2 ablation for the
+        # families whose reported cell uses the direct value head.
+        for spec in (FLAGS.critic_kxc.split(',') if FLAGS.critic_kxc else []):
+            k, c = (int(x) for x in spec.split(':'))
+            name = f'critic{k}_commit{c}'
+            assert name not in methods, name
+            variant_specs[name] = (k, c)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=c, progress_fn=progress_fn,
+                                          score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg,
+                                          critic_fn=critic_fn)
+            requested.append(name)
         # model-free control: the same member's twin-Q critic ranks each candidate's proposed action at the current state
         for c in (int(x) for x in FLAGS.critic_select_commit.split(',')) if FLAGS.critic_select_commit else []:
             name = f'qsel_commit{c}'
@@ -537,7 +572,8 @@ def main(_):
         score_mode=FLAGS.score_mode,
         score_agg=FLAGS.score_agg,
         ens_agg=FLAGS.ens_agg,
-        stall_eps=FLAGS.stall_eps if FLAGS.stall_window else None,
+        stall_eps=FLAGS.stall_eps if (FLAGS.stall_window or FLAGS.stall_guard) else None,
+        stall_guard=FLAGS.stall_guard,
         bank_composition=dict(algos=FLAGS.bank_algos, exclude=FLAGS.bank_exclude, duplicate=FLAGS.bank_duplicate, size=len(bank)),
         variants={n: dict(imagine=variant_specs[n][0], commit=variant_specs[n][1]) for n in requested},
         success=dict(

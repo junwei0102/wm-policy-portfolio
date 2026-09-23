@@ -182,12 +182,27 @@ class RolloutRanker:
         ens_agg='mean',
         critic_fn=None,
         log_decisions=False,
+        stall_guard=None,
+        stall_eps=0.05,
     ):
         self.wm = wm
         self.bank = dict(sorted(bank.items()))
         self.counter = counter
         self.horizon = horizon
         self._dec = _DecisionLog() if log_decisions else None
+        # Stall guard (m, h): the argmax is a fixed point whenever the state stops
+        # changing -- same state, same imagined futures, same scores, same winner --
+        # so a policy pinned against an obstacle is re-selected forever. At an
+        # arbitration boundary, if the REAL observation moved less than `stall_eps`
+        # (normalised units, as in StallRestartArbiter) over the last m env steps,
+        # every policy executed inside that window is excluded from the argmax for
+        # the next h env steps. No model or value call is added, no randomness.
+        self.stall_guard = (int(stall_guard[0]), int(stall_guard[1])) if stall_guard else None
+        self.stall_eps = float(stall_eps)
+        if self.stall_guard:
+            assert self.stall_guard[0] >= 1 and self.stall_guard[1] >= 1, stall_guard
+            self._obs_mean = np.asarray(wm.normalizer['obs_mean'], np.float32)
+            self._obs_std = np.asarray(wm.normalizer['obs_std'], np.float32)
         self.replan_every = replan_every or horizon
         self.names = list(self.bank)
         self.progress_fn = progress_fn
@@ -229,14 +244,42 @@ class RolloutRanker:
         self._usage = {n: 0 for n in self.names}
         self._steps_since_explore = 0
         self._n_explore = 0
-        self._t = 0  # env steps taken in this episode (decision log only)
+        self._t = 0  # env steps taken in this episode (decision log, stall guard)
+        self._zhist = []  # normalised real observations, one per env step (stall guard only)
+        self._pol_hist = []  # executed policy per env step (stall guard only)
+        self._tabu = {}  # policy name -> env step at which its exclusion ends
+        self._last_guard_t = None
+        self._n_guard = 0
         if self._dec is not None:
             self._dec.rows = []
 
     def episode_info(self):
         info = self._log.info()
         info['n_explore'] = self._n_explore
+        if self.stall_guard:
+            info['n_guard'] = self._n_guard
         return info
+
+    def _allowed(self):
+        """Indices the argmax may pick: the whole bank, minus the policies the stall guard excludes."""
+        if not self.stall_guard:
+            return np.arange(len(self.names))
+        m, h = self.stall_guard
+        self._tabu = {n: end for n, end in self._tabu.items() if end > self._t}
+        waited = self._last_guard_t is None or self._t - self._last_guard_t >= m  # give the replacement m steps to move
+        if waited and len(self._zhist) > m and float(np.linalg.norm(self._zhist[-1] - self._zhist[-1 - m])) < self.stall_eps:
+            window = self._pol_hist[-m:]
+            implicated = set(window)
+            if len(implicated | set(self._tabu)) >= len(self.names):
+                # everything has been tried here: start over, excluding only the policy that ran most in the window
+                self._tabu = {}
+                implicated = {max(implicated, key=lambda n: (window.count(n), n == self._current))}
+            for n in implicated:
+                self._tabu[n] = self._t + h
+            self._last_guard_t = self._t
+            self._n_guard += 1
+        allowed = [i for i, n in enumerate(self.names) if n not in self._tabu]
+        return np.array(allowed if allowed else range(len(self.names)))  # a one-policy bank cannot exclude anything
 
     def pop_decisions(self):
         return self._dec.pop() if self._dec is not None else None
@@ -281,16 +324,18 @@ class RolloutRanker:
                 -np.linalg.norm((traj - goal) / obs_std, axis=-1).mean(axis=1)
             )
         self.counter.mark_decision()
+        allowed = self._allowed()
         if self.explore_every and self._steps_since_explore >= self.explore_every:
-            least = min(self._usage.values())
-            cand = np.array([i for i, n in enumerate(self.names) if self._usage[n] == least])
+            least = min(self._usage[self.names[i]] for i in allowed)
+            cand = np.array([i for i in allowed if self._usage[self.names[i]] == least])
             winner = int(cand[_lexi_argmax(scores[cand], np.arange(len(cand), 0, -1.0))])
             self._steps_since_explore = 0
             self._n_explore += 1
             explored = True
         else:
-            winner = _lexi_argmax(scores, np.arange(len(self.names), 0, -1.0))
-            explored = False
+            winner = int(allowed[_lexi_argmax(scores[allowed], np.arange(len(allowed), 0, -1.0))])
+            # logged as an override whenever the guard changed the decision
+            explored = len(allowed) < len(self.names) and winner != _lexi_argmax(scores, np.arange(len(self.names), 0, -1.0))
         self._current = self.names[winner]
         self._steps_since_replan = 0
         self._log.n_plans += 1
@@ -299,12 +344,16 @@ class RolloutRanker:
             self._dec.record(self._t, ob, goal, scores, winner, explored)
 
     def act(self, ob, goal, temperature=0.0):
+        if self.stall_guard:
+            self._zhist.append((np.asarray(ob, dtype=np.float32) - self._obs_mean) / self._obs_std)
         if self._steps_since_replan is None or self._steps_since_replan >= self.replan_every:
             self._replan(np.asarray(ob, dtype=np.float32), np.asarray(goal, dtype=np.float32))
         self._steps_since_replan += 1
         self._steps_since_explore += 1
         self._t += 1
         self._usage[self._current] += 1
+        if self.stall_guard:
+            self._pol_hist.append(self._current)
         self._log.record_step(self._current)
         # Winner runs closed-loop on the REAL observation.
         return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
