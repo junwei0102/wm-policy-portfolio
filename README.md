@@ -82,7 +82,7 @@ datasets are not included; every script takes its paths as flags
    aggregates per-dataset success and paired contrasts.
    `scripts/collect_oracle.py` and `scripts/run_wm_diagnostics.py` produce the
    real-simulator branch diagnostics.
-5. **Value-head selection** (offline, before any evaluation episode):
+5. **Value-head selection** (offline, from held-out trajectories):
    `scripts/crossing_criterion.py --env_name=... --pairing=random
    --label=firstarrival --chunk_start=50 --n_chunks=1 --min_margin=20` scores
    each head by whether it ranks higher the state whose trajectory reaches a

@@ -1,8 +1,8 @@
 {
  "antmaze-large-navigate-v0": {
-  "policy_root": "/path/to/policies/p1-pilot",
+  "policy_root": "/path/to/policies/antmaze-large-navigate-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_57852678.0.20260903_133352",
+  "wm_dir": "/path/to/world_models/antmaze-large-navigate-v0",
   "wm_epoch": 1000000,
   "selected_k": 1,
   "best_fixed_per_seed": {
@@ -46,9 +46,9 @@
   }
  },
  "cube-double-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/cube-double-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_53931199.0.20260809_214031",
+  "wm_dir": "/path/to/world_models/cube-double-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 5,
   "best_fixed_per_seed": {
@@ -92,9 +92,9 @@
   }
  },
  "cube-double-play-v0": {
-  "policy_root": "/path/to/policies/p1-pilot",
+  "policy_root": "/path/to/policies/cube-double-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_53861556.0.20260809_050708",
+  "wm_dir": "/path/to/world_models/cube-double-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 5,
   "best_fixed_per_seed": {
@@ -138,9 +138,9 @@
   }
  },
  "cube-single-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/cube-single-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_55797745.0.20260820_174306",
+  "wm_dir": "/path/to/world_models/cube-single-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 5,
   "best_fixed_per_seed": {
@@ -184,9 +184,9 @@
   }
  },
  "cube-single-play-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/cube-single-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_55797743.0.20260820_174046",
+  "wm_dir": "/path/to/world_models/cube-single-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 5,
   "best_fixed_per_seed": {
@@ -230,9 +230,9 @@
   }
  },
  "cube-triple-noisy-v0": {
-  "policy_root": "/path/to/policies/p2-main",
+  "policy_root": "/path/to/policies/cube-triple-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_54607461.0.20260813_205641",
+  "wm_dir": "/path/to/world_models/cube-triple-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 5,
   "best_fixed_per_seed": {
@@ -276,9 +276,9 @@
   }
  },
  "cube-triple-play-v0": {
-  "policy_root": "/path/to/policies/p2-main",
+  "policy_root": "/path/to/policies/cube-triple-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_54607460.0.20260813_205641",
+  "wm_dir": "/path/to/world_models/cube-triple-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 5,
   "best_fixed_per_seed": {
@@ -322,9 +322,9 @@
   }
  },
  "puzzle-3x3-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-3x3-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_54662965.0.20260818_064939",
+  "wm_dir": "/path/to/world_models/puzzle-3x3-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -368,9 +368,9 @@
   }
  },
  "puzzle-3x3-play-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-3x3-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_55797746.0.20260820_174306",
+  "wm_dir": "/path/to/world_models/puzzle-3x3-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -414,9 +414,9 @@
   }
  },
  "puzzle-4x4-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-4x4-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_53931203.0.20260809_214422",
+  "wm_dir": "/path/to/world_models/puzzle-4x4-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -460,9 +460,9 @@
   }
  },
  "puzzle-4x4-play-v0": {
-  "policy_root": "/path/to/policies/p2-main",
+  "policy_root": "/path/to/policies/puzzle-4x4-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_53931202.0.20260809_214422",
+  "wm_dir": "/path/to/world_models/puzzle-4x4-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -506,9 +506,9 @@
   }
  },
  "puzzle-4x5-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-4x5-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_54662966.0.20260818_064939",
+  "wm_dir": "/path/to/world_models/puzzle-4x5-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -552,9 +552,9 @@
   }
  },
  "puzzle-4x5-play-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-4x5-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_54662910.0.20260818_064450",
+  "wm_dir": "/path/to/world_models/puzzle-4x5-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -598,9 +598,9 @@
   }
  },
  "puzzle-4x6-play-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-4x6-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_55797747.0.20260820_175157",
+  "wm_dir": "/path/to/world_models/puzzle-4x6-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -644,9 +644,9 @@
   }
  },
  "scene-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/scene-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_53931201.0.20260809_214422",
+  "wm_dir": "/path/to/world_models/scene-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -690,9 +690,9 @@
   }
  },
  "scene-play-v0": {
-  "policy_root": "/path/to/policies/p2-main",
+  "policy_root": "/path/to/policies/scene-play-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_53931200.0.20260809_214031",
+  "wm_dir": "/path/to/world_models/scene-play-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -736,9 +736,9 @@
   }
  },
  "puzzle-4x6-noisy-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/puzzle-4x6-noisy-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_54662967.0.20260818_065232",
+  "wm_dir": "/path/to/world_models/puzzle-4x6-noisy-v0",
   "wm_epoch": 1000000,
   "selected_k": 10,
   "best_fixed_per_seed": {
@@ -782,9 +782,9 @@
   }
  },
  "pointmaze-medium-navigate-v0": {
-  "policy_root": "/path/to/policies/mpilot",
+  "policy_root": "/path/to/policies/pointmaze-medium-navigate-v0",
   "policy_epoch": 1000000,
-  "wm_dir": "/path/to/world_models/sd000_s_56830806.0.20260829_015837",
+  "wm_dir": "/path/to/world_models/pointmaze-medium-navigate-v0",
   "wm_epoch": 1000000,
   "selected_k": 1,
   "best_fixed_per_seed": {

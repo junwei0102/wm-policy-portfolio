@@ -1,8 +1,8 @@
 """Train an ensemble world model on an OGBench dataset (strictly offline).
 
 Mirrors impls/main.py wiring: absl flags + config_flags, CsvLogger + wandb
-(offline by default via WMPP_WANDB_MODE), flags.json + params_<step>.pkl
-checkpoints (restorable via EnsembleWorldModel.load).
+(disabled by default; set WMPP_WANDB_MODE=offline or online to log), flags.json +
+params_<step>.pkl checkpoints (restorable via EnsembleWorldModel.load).
 """
 
 import json
@@ -42,7 +42,7 @@ flags.DEFINE_string('wandb_entity', 'YOUR_WANDB_ENTITY', 'W&B entity.')
 flags.DEFINE_string('wandb_project', 'wmogbench', 'W&B project.')
 flags.DEFINE_string(
     'wandb_dir',
-    '/path/to/wandb',
+    './wandb',
     'Persistent W&B data dir (survives the job if a run must be re-synced).',
 )
 
@@ -69,10 +69,9 @@ def main(_):
         tags=[FLAGS.run_group],
         name=exp_name,
         dir=FLAGS.wandb_dir,
-        # Compute nodes have outbound internet (verified: job 53629725 synced
-        # live); netrc auth is picked up automatically.
-        mode=os.environ.get('WMPP_WANDB_MODE', 'online'),
-        save_code=True,
+        # Nothing leaves the machine unless WMPP_WANDB_MODE is set to offline/online.
+        mode=os.environ.get('WMPP_WANDB_MODE', 'disabled'),
+        save_code=False,
     )
     save_dir = os.path.join(FLAGS.save_dir, wandb.run.project, FLAGS.run_group, exp_name)
     os.makedirs(save_dir, exist_ok=True)

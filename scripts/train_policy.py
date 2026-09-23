@@ -1,8 +1,8 @@
 """Launcher for policy-bank training via the UNMODIFIED OGBench impls/main.py.
 
-Compute nodes have no internet, but impls hard-codes wandb mode='online'.
-This wrapper patches `main.setup_wandb` (the name imported into main's
-namespace) to force the mode from $WMPP_WANDB_MODE (default: offline) without
+impls/main.py hard-codes wandb mode='online'. This wrapper patches
+`main.setup_wandb` (the name imported into main's namespace) to take the mode
+from $WMPP_WANDB_MODE (default: disabled, so nothing is uploaded) without
 touching the OGBench checkout. Sync offline runs later with `wandb sync`.
 
 Usage: python train_policy.py <all impls/main.py flags>
@@ -23,7 +23,7 @@ _orig_setup_wandb = ogbench_main.setup_wandb
 
 
 def _setup_wandb_patched(*args, **kwargs):
-    kwargs['mode'] = os.environ.get('WMPP_WANDB_MODE', 'offline')
+    kwargs['mode'] = os.environ.get('WMPP_WANDB_MODE', 'disabled')
     return _orig_setup_wandb(*args, **kwargs)
 
 
