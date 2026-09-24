@@ -23,7 +23,7 @@ from absl import app, flags
 from evaluation.oracle import headroom
 from evaluation.paired_eval import evaluate_paired
 from interfaces.policy_bank import load_bank, select_best_fixed
-from planners.portfolio import CriticSelectArbiter, LeastUsedArbiter, NoisyPolicyArbiter, PolicyMPC, PortfolioMPC, RandomArbiter, RolloutRanker, StallRestartArbiter
+from planners.portfolio import CriticSelectArbiter, LeastUsedArbiter, NativeSelectArbiter, NoisyPolicyArbiter, PolicyMPC, PortfolioMPC, RandomArbiter, RolloutRanker, StallRestartArbiter
 from planners.sim_rollout import SimOracleArbiter, SimRolloutRanker
 from world_model.model import EnsembleWorldModel
 from world_model.rollout import TransitionCounter
@@ -84,6 +84,10 @@ flags.DEFINE_string(
 flags.DEFINE_string('critic_kc', None, 'k=c cells for the --critic_scorer variants, e.g. "5,100".')
 flags.DEFINE_string('critic_kxc', None, 'Off-diagonal (k,c) cells for the --critic_scorer variants as "k:c" pairs, e.g. "1:10,10:1" (variant critic{k}_commit{c}).')
 flags.DEFINE_string('critic_select_commit', None, 'Re-selection intervals c for the model-free Q-select control qsel_commit{c}: i*=argmax_i min_j Q_j(s, pi_i(s,g), g) of the --critic_scorer member, no rollout.')
+# Native-critic comparison (every member scored by its OWN value network; the bank must consist of
+# members that have one, e.g. --bank_algos=gciql,gcivl,hiql).
+flags.DEFINE_string('native_kc', None, 'k=c cells of WMPA with native heads: native{k}_commit{k} scores member i\'s imagined states with member i\'s own V.')
+flags.DEFINE_string('native_select_commit', None, 'Re-selection intervals c of the model-free native-critic selector nsel_commit{c}: i*=argmax_i V_i(s, g).')
 # Sampling-MPC baseline on the best fixed policy (world-model search WITHOUT
 # a portfolio): N Gaussian perturbations of the policy action, imagined k
 # steps, value-head scored, replanned every c steps. Off when --mpc_n=0.
@@ -368,12 +372,33 @@ def main(_):
                                           critic_fn=critic_fn)
             requested.append(name)
         # model-free control: the same member's twin-Q critic ranks each candidate's proposed action at the current state
-        for c in (int(x) for x in FLAGS.critic_select_commit.split(',')) if FLAGS.critic_select_commit else []:
+        for c in dict.fromkeys(int(x) for x in FLAGS.critic_select_commit.split(',')) if FLAGS.critic_select_commit else []:
             name = f'qsel_commit{c}'
             assert name not in methods, name
             variant_specs[name] = (0, c)  # k=0: no imagined transitions (budget assertion expects exactly zero)
             counters[name] = TransitionCounter()
             methods[name] = CriticSelectArbiter(bank, qsel_fn, c, seed=FLAGS.random_seed)
+            requested.append(name)
+
+    if FLAGS.native_kc or FLAGS.native_select_commit:
+        native_fns = {n: (lambda pol: (lambda o, g: np.asarray(pol.value(o, g))))(bank[n]) for n in bank}
+        d_obs = int(np.asarray(wm.normalizer['obs_mean']).shape[-1])
+        for n in bank:  # fail early if a member has no goal-conditioned value network
+            native_fns[n](np.zeros((1, d_obs), np.float32), np.zeros((1, d_obs), np.float32))
+        for k in (int(x) for x in FLAGS.native_kc.split(',')) if FLAGS.native_kc else []:
+            name = f'native{k}_commit{k}'
+            assert name not in methods, name
+            variant_specs[name] = (k, k)
+            counters[name] = TransitionCounter()
+            methods[name] = RolloutRanker(wm, bank, counters[name], horizon=k, replan_every=k, progress_fn=progress_fn,
+                                          score_mode='native', score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg, native_fns=native_fns)
+            requested.append(name)
+        for c in dict.fromkeys(int(x) for x in FLAGS.native_select_commit.split(',')) if FLAGS.native_select_commit else []:
+            name = f'nsel_commit{c}'
+            assert name not in methods, name
+            variant_specs[name] = (0, c)
+            counters[name] = TransitionCounter()
+            methods[name] = NativeSelectArbiter(bank, native_fns, c, seed=FLAGS.random_seed)
             requested.append(name)
 
     if FLAGS.classifier:

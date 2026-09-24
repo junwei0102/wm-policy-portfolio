@@ -184,6 +184,7 @@ class RolloutRanker:
         log_decisions=False,
         stall_guard=None,
         stall_eps=0.05,
+        native_fns=None,
     ):
         self.wm = wm
         self.bank = dict(sorted(bank.items()))
@@ -219,7 +220,11 @@ class RolloutRanker:
         #   mean — average along the imagined path (rewards steady progress)
         #   last — state the policy ENDS in after k steps (matches commit-k
         #          semantics: the next replan starts from wherever it leaves you)
-        assert score_agg in ('max', 'mean', 'last'), score_agg
+        #   trendmax — direction first: sum_t sign(Vbar_t - Vbar_{t-1}) over the k imagined steps
+        #          (Vbar_0 = value of the current real state), ties broken by max; a scale-free
+        #          "is the path moving toward the goal" count that cannot be won by one
+        #          optimistic step.
+        assert score_agg in ('max', 'mean', 'last', 'trendmax'), score_agg
         self.score_agg = score_agg
         # 'progress': task-relevant progress (privileged task dims; diagnostics
         # only). 'value': the learned LAVL value head ALONE — score is the best
@@ -228,11 +233,18 @@ class RolloutRanker:
         # 'critic': a bank member's own V(s, g) (e.g. GCIQL's IQL value) applied
         # to every candidate's imagined raw states -- an ablation of the LAVL
         # metric head that keeps dynamics, horizon, and commitment identical.
-        assert score_mode in ('progress', 'value', 'critic'), score_mode
+        # 'native': policy i's imagined states are scored by policy i's OWN goal-conditioned
+        # value network (native_fns[name](states, goals) -> (N,)); the scores of different
+        # members then come from different critics -- the native-critic comparison the
+        # shared head is meant to replace.
+        assert score_mode in ('progress', 'value', 'critic', 'native'), score_mode
         if score_mode == 'value':
             assert wm.config['value_head'], 'WM was trained without a value head'
         if score_mode == 'critic':
             assert critic_fn is not None, 'score_mode=critic needs critic_fn(states, goals) -> (N,)'
+        if score_mode == 'native':
+            assert native_fns is not None and all(n in native_fns for n in self.names), 'score_mode=native needs a value fn per member'
+        self.native_fns = native_fns
         self.critic_fn = critic_fn
         self.score_mode = score_mode
         self.reset_episode()
@@ -284,6 +296,16 @@ class RolloutRanker:
     def pop_decisions(self):
         return self._dec.pop() if self._dec is not None else None
 
+    @staticmethod
+    def _trendmax(v0_p, scores_hp):
+        """(P,) value of the current state, (H, P) per-step scores -> (P,): number of improving steps
+        (integer in [-H, H]) plus a max-score tie-breaker scaled into [0, 0.5) so that it never
+        overturns a difference of one step."""
+        dv = np.diff(np.concatenate([v0_p[None], scores_hp], axis=0), axis=0)  # (H, P)
+        trend = np.sign(dv).sum(axis=0)
+        mx = scores_hp.max(axis=0)
+        return trend + 0.5 * (mx - mx.min()) / (np.ptp(mx) + 1e-9)
+
     def _agg_horizon(self, scores_hp):
         """(H, P) per-step ensemble-mean scores -> (P,) via self.score_agg."""
         if self.score_agg == 'mean':
@@ -299,18 +321,40 @@ class RolloutRanker:
             self.wm, [self.bank[n] for n in self.names], ob, goal, self.horizon, self.counter
         )
         traj = roll['obs_traj'][1:]  # (H, E, P, d)
+        x0 = roll['obs_traj'][0]  # (E, P, d): the current real state (identical across members)
         H, E, P = traj.shape[:3]
         self._log.dyn_calls += H * E * P
+        trend = self.score_agg == 'trendmax'
         if self.score_mode == 'value':
             traj_e = np.moveaxis(traj, 1, 0).reshape(E, H * P, -1)  # (E, H*P, d)
             goals_e = np.broadcast_to(goal, traj_e.shape[:-1] + goal.shape[-1:])
             vals = np.asarray(self.wm.value_score(traj_e, goals_e))  # (E, H*P)
             self._log.val_calls += H * E * P
-            scores = self._agg_horizon(_ens_reduce(vals.reshape(E, H, P), self.ens_agg))  # (P,)
+            per_step = _ens_reduce(vals.reshape(E, H, P), self.ens_agg)  # (H, P)
+            if trend:
+                v0 = np.asarray(self.wm.value_score(x0, np.broadcast_to(goal, x0.shape[:-1] + goal.shape[-1:])))  # (E, P)
+                self._log.val_calls += E * P
+                scores = self._trendmax(_ens_reduce(v0[:, None, :], self.ens_agg)[0], per_step)
+            else:
+                scores = self._agg_horizon(per_step)  # (P,)
         elif self.score_mode == 'critic':
             flat = traj.reshape(H * E * P, -1)  # raw imagined states
             goals_flat = np.broadcast_to(goal, flat.shape[:-1] + goal.shape[-1:])
             vals = np.asarray(self.critic_fn(flat, goals_flat)).reshape(H, E, P)
+            self._log.val_calls += H * E * P
+            per_step = _ens_reduce(np.moveaxis(vals, 1, 0), self.ens_agg)  # (H, P)
+            if trend:
+                flat0 = x0.reshape(E * P, -1)
+                v0 = np.asarray(self.critic_fn(flat0, np.broadcast_to(goal, flat0.shape[:-1] + goal.shape[-1:]))).reshape(E, P)
+                self._log.val_calls += E * P
+                scores = self._trendmax(_ens_reduce(v0[:, None, :], self.ens_agg)[0], per_step)
+            else:
+                scores = self._agg_horizon(per_step)  # (P,)
+        elif self.score_mode == 'native':
+            vals = np.empty((H, E, P), dtype=np.float64)
+            goals_flat = np.broadcast_to(goal, (H * E,) + goal.shape[-1:])
+            for p, name in enumerate(self.names):
+                vals[:, :, p] = np.asarray(self.native_fns[name](traj[:, :, p, :].reshape(H * E, -1), goals_flat)).reshape(H, E)
             self._log.val_calls += H * E * P
             scores = self._agg_horizon(_ens_reduce(np.moveaxis(vals, 1, 0), self.ens_agg))  # (P,)
         elif self.progress_fn is not None:
@@ -425,6 +469,52 @@ class RandomArbiter:
                                  self.names.index(self._current), False)
         self._steps_since_draw += 1
         self._t += 1
+        self._log.record_step(self._current)
+        return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
+
+
+class NativeSelectArbiter:
+    """Model-free arbitration by each member's OWN critic: at every arbitration boundary
+    (every `commit` real env steps) member i scores the CURRENT state with its own
+    goal-conditioned value network, i* = argmax_i V_i(s, g), and pi_{i*} runs closed-loop
+    for `commit` steps. No imagined states, no shared scorer: the values of different
+    members come from different estimators. Dynamics-call count is zero; value calls are
+    P per decision.
+    """
+
+    def __init__(self, bank, native_fns, commit, seed=0):
+        assert commit >= 1, commit
+        self.bank = dict(sorted(bank.items()))
+        self.names = list(self.bank)
+        assert all(n in native_fns for n in self.names), 'every member needs its own value fn'
+        self.native_fns = native_fns
+        self.commit = int(commit)
+        self.seed = int(seed)  # unused (deterministic)
+        self.reset_episode()
+
+    def reset_episode(self):
+        self._steps_since_select = None
+        self._current = None
+        self._log = _EpisodeLog()
+
+    def episode_info(self):
+        return self._log.info()
+
+    def _select(self, ob, goal):
+        t0 = time.perf_counter()
+        ob = np.asarray(ob, dtype=np.float32)[None]
+        goal = np.asarray(goal, dtype=np.float32)[None]
+        v = np.array([float(np.asarray(self.native_fns[n](ob, goal)).reshape(-1)[0]) for n in self.names])
+        self._log.val_calls += len(self.names)
+        self._current = self.names[_lexi_argmax(v, np.arange(len(self.names), 0, -1.0))]
+        self._steps_since_select = 0
+        self._log.n_plans += 1
+        self._log.plan_seconds += time.perf_counter() - t0
+
+    def act(self, ob, goal, temperature=0.0):
+        if self._steps_since_select is None or self._steps_since_select >= self.commit:
+            self._select(ob, goal)
+        self._steps_since_select += 1
         self._log.record_step(self._current)
         return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
 
