@@ -71,7 +71,9 @@ datasets are not included; every script takes its paths as flags
    --episodes_per_task=50 --out_tag=og50`. `--critic_scorer=gciql --critic_kc=10`
    scores with the direct value, `--kxc=10:5` / `--critic_kxc=10:5` any other
    $(k,c)$ cell; `--random_commit` and `--critic_select_commit`
-   run the random and Q-select controls, `--mpc_n=6 --mpc_sigma=0.2 --mpc_k=<k>
+   run the random and Q-select controls, `--bank_algos=gciql,gcivl,hiql
+   --native_kc=<k> --native_select_commit=1,<k>` the own-value scoring and
+   selection on the three-member bank, `--mpc_n=6 --mpc_sigma=0.2 --mpc_k=<k>
    --mpc_commit=1` the every-step action-level MPC; `--episode_range=50:100`
    evaluates the held-out episodes used for interval selection.
 4. **Report**: `scripts/derive_family_cells.py` picks the per-family interval on

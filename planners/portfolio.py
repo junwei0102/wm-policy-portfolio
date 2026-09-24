@@ -182,6 +182,7 @@ class RolloutRanker:
         ens_agg='mean',
         critic_fn=None,
         log_decisions=False,
+        native_fns=None,
     ):
         self.wm = wm
         self.bank = dict(sorted(bank.items()))
@@ -213,11 +214,17 @@ class RolloutRanker:
         # 'critic': a bank member's own V(s, g) (e.g. GCIQL's IQL value) applied
         # to every candidate's imagined raw states -- an ablation of the LAVL
         # metric head that keeps dynamics, horizon, and commitment identical.
-        assert score_mode in ('progress', 'value', 'critic'), score_mode
+        # 'native': policy i's imagined states are scored by policy i's OWN goal-conditioned
+        # value network (native_fns[name](states, goals) -> (N,)); the scores of different
+        # members then come from different critics -- the own-value comparison of the appendix.
+        assert score_mode in ('progress', 'value', 'critic', 'native'), score_mode
         if score_mode == 'value':
             assert wm.config['value_head'], 'WM was trained without a value head'
         if score_mode == 'critic':
             assert critic_fn is not None, 'score_mode=critic needs critic_fn(states, goals) -> (N,)'
+        if score_mode == 'native':
+            assert native_fns is not None and all(n in native_fns for n in self.names), 'score_mode=native needs a value fn per member'
+        self.native_fns = native_fns
         self.critic_fn = critic_fn
         self.score_mode = score_mode
         self.reset_episode()
@@ -268,6 +275,13 @@ class RolloutRanker:
             flat = traj.reshape(H * E * P, -1)  # raw imagined states
             goals_flat = np.broadcast_to(goal, flat.shape[:-1] + goal.shape[-1:])
             vals = np.asarray(self.critic_fn(flat, goals_flat)).reshape(H, E, P)
+            self._log.val_calls += H * E * P
+            scores = self._agg_horizon(_ens_reduce(np.moveaxis(vals, 1, 0), self.ens_agg))  # (P,)
+        elif self.score_mode == 'native':
+            vals = np.empty((H, E, P), dtype=np.float64)
+            goals_flat = np.broadcast_to(goal, (H * E,) + goal.shape[-1:])
+            for p, name in enumerate(self.names):
+                vals[:, :, p] = np.asarray(self.native_fns[name](traj[:, :, p, :].reshape(H * E, -1), goals_flat)).reshape(H, E)
             self._log.val_calls += H * E * P
             scores = self._agg_horizon(_ens_reduce(np.moveaxis(vals, 1, 0), self.ens_agg))  # (P,)
         elif self.progress_fn is not None:
@@ -376,6 +390,52 @@ class RandomArbiter:
                                  self.names.index(self._current), False)
         self._steps_since_draw += 1
         self._t += 1
+        self._log.record_step(self._current)
+        return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
+
+
+class NativeSelectArbiter:
+    """Model-free arbitration by each member's OWN critic: at every arbitration boundary
+    (every `commit` real env steps) member i scores the CURRENT state with its own
+    goal-conditioned value network, i* = argmax_i V_i(s, g), and pi_{i*} runs closed-loop
+    for `commit` steps. No imagined states, no shared scorer: the values of different
+    members come from different estimators. Dynamics-call count is zero; value calls are
+    P per decision.
+    """
+
+    def __init__(self, bank, native_fns, commit, seed=0):
+        assert commit >= 1, commit
+        self.bank = dict(sorted(bank.items()))
+        self.names = list(self.bank)
+        assert all(n in native_fns for n in self.names), 'every member needs its own value fn'
+        self.native_fns = native_fns
+        self.commit = int(commit)
+        self.seed = int(seed)  # unused (deterministic)
+        self.reset_episode()
+
+    def reset_episode(self):
+        self._steps_since_select = None
+        self._current = None
+        self._log = _EpisodeLog()
+
+    def episode_info(self):
+        return self._log.info()
+
+    def _select(self, ob, goal):
+        t0 = time.perf_counter()
+        ob = np.asarray(ob, dtype=np.float32)[None]
+        goal = np.asarray(goal, dtype=np.float32)[None]
+        v = np.array([float(np.asarray(self.native_fns[n](ob, goal)).reshape(-1)[0]) for n in self.names])
+        self._log.val_calls += len(self.names)
+        self._current = self.names[_lexi_argmax(v, np.arange(len(self.names), 0, -1.0))]
+        self._steps_since_select = 0
+        self._log.n_plans += 1
+        self._log.plan_seconds += time.perf_counter() - t0
+
+    def act(self, ob, goal, temperature=0.0):
+        if self._steps_since_select is None or self._steps_since_select >= self.commit:
+            self._select(ob, goal)
+        self._steps_since_select += 1
         self._log.record_step(self._current)
         return np.clip(np.asarray(self.bank[self._current].act(ob, goal)), -1, 1)
 
