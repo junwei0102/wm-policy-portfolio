@@ -23,7 +23,7 @@ datasets; random switching at the same interval reaches 39%.
   dynamics); for puzzle the state value `V(s,g)` of the bank's GCIQL member.
 - **Score and interval**: max over the horizon of the ensemble-mean value; the
   single interval `k = c` is set per task family (maze 1, cube 5, scene and
-  puzzle 10) on held-out episodes. The budget is `M·E = 18` dynamics and value
+  puzzle 10). The budget is `M·E = 18` dynamics and value
   calls per environment step regardless of `k`.
 - **Controls** (`planners/portfolio.py`, `planners/sim_rollout.py`): random
   switching at the same interval, Q-select (the GCIQL twin-Q critic, no model),
@@ -75,9 +75,9 @@ datasets are not included; every script takes its paths as flags
    --native_kc=<k> --native_select_commit=1,<k>` the own-value scoring and
    selection on the three-member bank, `--mpc_n=6 --mpc_sigma=0.2 --mpc_k=<k>
    --mpc_commit=1` the every-step action-level MPC; `--episode_range=50:100`
-   evaluates the held-out episodes used for interval selection.
-4. **Report**: `scripts/derive_family_cells.py` picks the per-family interval on
-   the held-out episodes and prints the matching flags; `scripts/report_og50.py
+   evaluates episodes other than the reported ones.
+4. **Report**: `scripts/derive_family_cells.py` picks one interval per task family
+   and prints the matching flags; `scripts/report_og50.py
    --fixed_tag=og50fx --select_rule=family
    --family_k=maze:1,cube:5,scene:10,puzzle:10
    --family_c=maze:1,cube:5,scene:10,puzzle:10 --family_scorer=puzzle:critic`

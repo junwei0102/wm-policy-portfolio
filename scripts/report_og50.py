@@ -54,12 +54,11 @@ flags.DEFINE_string('family_scorer', '', 'Per-family rollout scorer, e.g. "puzzl
                     'via --extra_tags (e.g. og50cr).')
 flags.DEFINE_string('extra_tags', '', 'Comma-separated extra dir tags whose variants are merged into the main '
                     'tag (e.g. og50r1 = Random at c=1).')
-flags.DEFINE_enum('select_rule', 'test', ['test', 'loo_family', 'global', 'validation', 'family'],
-                  'How the reported k=c cell is chosen: test = best mean on this dataset (paper); loo_family = the k with the best '
-                  'mean over the OTHER datasets of the same family (leave-one-dataset-out); global = the k with the best macro-average '
-                  'over all other datasets. The two leakage-free rules never look at the dataset being reported.')
-flags.DEFINE_string('family_k', 'maze:1,cube:5,scene:10,puzzle:10', 'family:k list for --select_rule=family (WMPA k=c per task family; '
-                    'values chosen on the validation episodes 50..99, never on the reported ones).')
+flags.DEFINE_enum('select_rule', 'family', ['test', 'loo_family', 'global', 'validation', 'family'],
+                  'How the reported k=c cell is chosen: family = one k=c per task family (paper); test = best mean on this dataset '
+                  '(diagnostic only, uses the reported episodes); loo_family = the k with the best mean over the OTHER datasets of '
+                  'the same family; global = the k with the best macro-average over all other datasets.')
+flags.DEFINE_string('family_k', 'maze:1,cube:5,scene:10,puzzle:10', 'family:k list for --select_rule=family (WMPA k=c per task family).')
 flags.DEFINE_string('family_c', 'maze:1,cube:5,scene:10,puzzle:10', 'family:c list for --select_rule=family (Random-Switch interval per family).')
 flags.DEFINE_string('val_tag', 'og50val', 'Dir tag of the validation sweep (episodes 50..99) used by --select_rule=validation: '
                     'k* = best mean WMPA diagonal cell and c* = best mean Random interval, both chosen there and never on the '
