@@ -701,7 +701,8 @@ def main(_):
     fig, ax = plt.subplots(figsize=(5.5, 2.25))  # full text width, flat: placed with width=\linewidth
     xs = np.array([stats[e]['union'] - stats[e]['obest'] for e in envs])
     ys = np.array([stats[e]['dW'] for e in envs])
-    ax.plot([0, max(xs.max(), ys.max()) + 2], [0, max(xs.max(), ys.max()) + 2], ls='--', lw=0.8, color='#9a9a9a')
+    ax.plot([0, max(xs.max(), ys.max()) + 2], [0, max(xs.max(), ys.max()) + 2], ls='--', lw=0.8, color='#9a9a9a',
+            label=r'$y=x$: gain explained by per-episode selection')
     for fam, _ in FAMILIES:
         idx = [i for i, e in enumerate(envs) if ENV_FAMILY[e] == fam]
         if idx:
@@ -709,8 +710,8 @@ def main(_):
                        zorder=3, label=fam)
     # boxed legend so its markers are not read as data points near the y=x line
     ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), fontsize=6.5, frameon=True, fancybox=False, framealpha=1.0,
-              edgecolor='#bfbfbf', facecolor='white', handletextpad=0.3, borderaxespad=0.3, borderpad=0.4, ncol=4,
-              columnspacing=1.2).get_frame().set_linewidth(0.6)  # above the axes: never overlaps a point or the y=x line
+              edgecolor='#bfbfbf', facecolor='white', handletextpad=0.3, borderaxespad=0.3, borderpad=0.4, ncol=5,
+              columnspacing=0.9, handlelength=1.6).get_frame().set_linewidth(0.6)  # above the axes: never overlaps a point or the y=x line
     labels_on = {e for e in envs if abs(stats[e]['dW']) > 4 or (stats[e]['union'] - stats[e]['obest']) > 12}
     # (dx pt, dy pt, ha): the crowded low-headroom cluster is labelled to the LEFT of the y axis
     # (xlim starts at -6.5 to make room) so no label covers a marker or another label.
