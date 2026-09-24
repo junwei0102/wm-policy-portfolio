@@ -39,7 +39,7 @@ flags.DEFINE_integer('log_interval', 5000, 'Logging interval.')
 flags.DEFINE_integer('val_interval', 5000, 'Validation interval.')
 flags.DEFINE_integer('save_interval', 100000, 'Checkpoint interval.')
 flags.DEFINE_string('wandb_entity', 'YOUR_WANDB_ENTITY', 'W&B entity.')
-flags.DEFINE_string('wandb_project', 'wmogbench', 'W&B project.')
+flags.DEFINE_string('wandb_project', 'wmpa', 'W&B project.')
 flags.DEFINE_string(
     'wandb_dir',
     './wandb',

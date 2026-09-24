@@ -319,7 +319,7 @@ def main(_):
                                           score_mode='critic', score_agg=FLAGS.score_agg, ens_agg=FLAGS.ens_agg,
                                           critic_fn=critic_fn)
             requested.append(name)
-        # model-free control: the same member's twin-Q critic ranks each candidate's proposed action at the current state
+        # model-free control: the same member's twin-Q critic (min over the two Q heads) ranks each candidate's proposed action at the current state
         for c in (int(x) for x in FLAGS.critic_select_commit.split(',')) if FLAGS.critic_select_commit else []:
             name = f'qsel_commit{c}'
             assert name not in methods, name

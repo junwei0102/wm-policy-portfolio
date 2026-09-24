@@ -73,7 +73,7 @@ def main(_):
         progress_fn = None  # no privileged progress diagnostic for this env (e.g. pointmaze)
         print('[diag] no progress fn for this env; progress_* blocks will be null')
     has_value = True
-    has_succ = False  # success head removed (2026-08-27); its branches below are inert
+    has_succ = False  # no success head in the released architecture; its branches below are inert
     counter = TransitionCounter()
     h_idx = np.array(horizons) - 1
     scores = np.zeros((S, P, len(horizons)), dtype=np.float64)

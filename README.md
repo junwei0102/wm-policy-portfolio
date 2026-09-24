@@ -4,8 +4,8 @@ Test-time arbitration over a bank of frozen goal-conditioned policies on
 [OGBench](https://github.com/seohongpark/ogbench).
 
 Several frozen goal-conditioned policies, trained by different offline GCRL
-algorithms (GCBC, GCIVL, GCIQL, QRL, CRL, HIQL; three seeds each) on the *same*
-dataset, form a bank. Every `c` environment steps WMPA rolls each policy forward
+algorithms (GCBC, GCIVL, GCIQL, QRL, CRL, HIQL; one checkpoint per algorithm,
+so a bank has six members; three bank seeds) on the *same* dataset, form a bank. Every `c` environment steps WMPA rolls each policy forward
 `k` steps in a learned state-space world model, scores the imagined futures with
 one shared goal-conditioned value function, and executes the highest-scoring
 policy until the next arbitration. No policy is retrained. On 18 state-based
@@ -26,9 +26,9 @@ datasets; random switching at the same interval reaches 39%.
   puzzle 10) on held-out episodes. The budget is `M·E = 18` dynamics and value
   calls per environment step regardless of `k`.
 - **Controls** (`planners/portfolio.py`, `planners/sim_rollout.py`): random
-  switching at the same interval, Q-select (the GCIQL twin critic, no model),
-  action-level MPC on a single policy, stall-restart and least-used switching,
-  and the same arbitration with the real simulator in place of the model.
+  switching at the same interval, Q-select (the GCIQL twin-Q critic, no model),
+  action-level MPC on a single policy, stall-restart switching, own-value
+  scoring, and the same arbitration with the real simulator in place of the model.
 
 ## Layout
 

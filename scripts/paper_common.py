@@ -1,7 +1,6 @@
-"""Constants and statistics helpers shared by the paper generator scripts.
+"""Constants and statistics helpers shared by the reporting scripts.
 
-No absl flags are defined here, so every generator (report_og50, make_paper_assets,
-report_ablations, report_diagnostics) can import it without duplicate-flag errors.
+No absl flags are defined here, so every script can import it without duplicate-flag errors.
 """
 import csv
 import os
@@ -31,7 +30,7 @@ def tex_env(env):
 
 
 def macro_key(env):
-    """Env name -> LaTeX-safe macro suffix; identical to make_paper_assets historically."""
+    """Env name -> LaTeX-safe macro suffix."""
     key = ''.join(w.capitalize() for w in short(env).replace('x', 'by').split('-'))
     for dgt, word in (('3', 'Three'), ('4', 'Four'), ('5', 'Five'), ('6', 'Six')):
         key = key.replace(dgt, word)

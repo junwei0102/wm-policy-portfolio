@@ -251,10 +251,9 @@ class EnsembleWorldModel(flax.struct.PyTreeNode):
 
         config = dict(config)
         # The architecture is fixed: delta dynamics + LAVL metric value head.
-        # The success head (never used by any reported planner) and the MC
-        # gamma^D value head were removed on 2026-08-27; their config keys are
-        # still accepted so existing flags.json / command lines parse, but
-        # only the retained architecture can be built or restored.
+        # The config keys of two earlier heads (a success head and a Monte-Carlo
+        # value head) are still accepted so that older flags.json files parse,
+        # but only the retained architecture can be built or restored.
         assert not config.get('success_head', False), 'success head removed; checkpoints with one cannot be loaded'
         assert config.get('value_head', True), 'the LAVL value head is mandatory'
         assert config.get('value_head_type', 'lavl') == 'lavl', 'only the LAVL value head is supported'

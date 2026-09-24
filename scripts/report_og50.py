@@ -4,7 +4,7 @@ Reads per env `bank_sd<seed>_og50/` (planner variants only: diagonal (k,k)
 cells, score1_commit1, random_commit{10,25,50,100}); fixed-policy baselines
 come either from `bank_sd<seed>_og50fx/` (--fixed_tag=og50fx: every bank
 policy re-evaluated on the planners' episode seeds -> paired contrasts; the
-paper's setting since 2026-08-25) or, with --fixed_tag empty, from each run's
+paper's setting) or, with --fixed_tag empty, from each run's
 OGBench eval.csv recorded in manifests/wmpp_env_config.json (unpaired offset).
 
 Per env it reports:
@@ -14,9 +14,8 @@ Per env it reports:
     delta vs the best policy family over 3 seeds (eval.csv mean, treated as
     the reported baseline value; CI from hierarchical bootstrap of the
     method's episodes) and paired method-vs-method contrasts;
-  * switching, model calls, usage entropy and act-ms overhead (fixed-policy
-    ms anchor comes from the same-bank 20-episode ablation runs, recorded in
-    ablation_abl.json, since og50 jobs do not re-run fixed policies).
+  * switching, model calls, usage entropy and act-ms overhead (the fixed-policy
+    ms anchor comes from the --fixed_tag runs).
 
 Usage:
   python scripts/report_og50.py --envs=all
@@ -45,8 +44,7 @@ flags.DEFINE_string('seeds', '0,1,2', 'Bank seeds to aggregate.')
 flags.DEFINE_integer('n_boot', 10000, 'Bootstrap resamples.')
 flags.DEFINE_string('env_config', os.path.join(ROOT, 'manifests', 'wmpp_env_config.json'),
                     'Per-env eval.csv baselines (OGBench test, 250 eps per seed).')
-flags.DEFINE_string('abl_json', '/path/to/planner_eval/ablation_abl.json',
-                    'Prior ablation report (fixed-policy act-ms anchor).')
+flags.DEFINE_string('abl_json', '', 'Optional JSON {env_name: fixed_policy_act_ms_per_step} used as the fixed-policy latency anchor when --fixed_tag is empty.')
 flags.DEFINE_string('out', None, 'Output prefix (default: <eval_root>/og50_report).')
 flags.DEFINE_bool('onestep_as_cell', False, 'Treat (1,1) as one more k=c cell of the hyperparameter sweep '
                   '(selected like any other); drop the separate One-Step control and report Random only.')
@@ -431,7 +429,7 @@ def main(_):
     seeds = [int(s) for s in FLAGS.seeds.split(',')]
     envcfg = json.load(open(FLAGS.env_config))
     abl_fixed_ms = {}
-    if os.path.exists(FLAGS.abl_json):
+    if FLAGS.abl_json and os.path.exists(FLAGS.abl_json):
         abl_fixed_ms = {r['env_name']: r['fixed_policy_act_ms_per_step'] for r in json.load(open(FLAGS.abl_json))}
     if FLAGS.envs == 'all':
         envs = sorted(d for d in os.listdir(FLAGS.eval_root)
