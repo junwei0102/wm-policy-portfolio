@@ -123,10 +123,9 @@ def main(_):
         c = e['cells']
         vs = lambda n: '--' if n not in e['vs_shared'] else fmt_ci(e['vs_shared'][n])
         cell = lambda n: '--' if c.get(n) is None else f"${c[n]['mean']:.0f} \\pm {c[n]['hw']:.0f}$"
-        top = max(c[n]['mean'] for n in ('best3', 'nsel_k', 'qsel_k', 'native', 'shared') if c.get(n))
+        top = max(c[n]['mean'] for n in ('best3', 'native', 'shared') if c.get(n))
         bold = lambda n: '--' if c.get(n) is None else (f"$\\mathbf{{{c[n]['mean']:.0f} \\pm {c[n]['hw']:.0f}}}$" if c[n]['mean'] >= 0.95 * top - 1e-9 and top > 0 else cell(n))
-        body.append(f"{tex_env(env)} & $({k},{k})$ & {bold('best3')} & {bold('nsel_k')} & {bold('qsel_k')} & {bold('native')} & {bold('shared')} & "
-                    f"{vs('native')} & {vs('nsel_k')} & {cell('paper6')} \\\\")
+        body.append(f"{tex_env(env)} & $({k},{k})$ & {bold('best3')} & {bold('native')} & {bold('shared')} & {vs('native')} \\\\")
         un = usage[f'native{k}_commit{k}']
         dom = max(un['first_pick'].values()) if un else float('nan')
         single = un['single_policy_episodes'] if un else float('nan')
@@ -146,9 +145,8 @@ def main(_):
                    f"\\newcommand{{\\NatMeanDelta{lab}}}{{{100 * np.mean([c['delta'] for c in cs]):+.0f}}}"]
         print(f"{lab:8s} vs Best-of-3: sig up {sum(1 for c in cs if c['significant'] and c['delta'] > 0)}, sig down {sum(1 for c in cs if c['significant'] and c['delta'] < 0)}, mean {100 * np.mean([c['delta'] for c in cs]):+.1f} (n={len(cs)})")
     macros.append(f"\\newcommand{{\\NatNumEnvs}}{{{len(out)}}}")
-    tex = ('\\begin{tabular}{lc|ccccc|rr|c}\n\\toprule\n'
-           ' & & \\multicolumn{5}{c|}{three-member bank $\\{$GCIQL, GCIVL, HIQL$\\}$} & \\multicolumn{2}{c|}{paired difference vs.\\ shared} & six-member \\\\\n'
-           'Dataset & $(k,c)$ & Best & Native-select & Q-select & \\wmpa{} native & \\wmpa{} shared & native $-$ shared & Native-select $-$ shared & \\wmpa{} \\\\\n\\midrule\n'
+    tex = ('\\begin{tabular}{lcccc r}\n\\toprule\n'
+           'Dataset & $(k,c)$ & Best member & \\wmpa{} native & \\wmpa{} shared & native $-$ shared [95\\% CI] \\\\\n\\midrule\n'
            + '\n'.join(body) + '\n\\bottomrule\n\\end{tabular}\n')
     print('\n' + tex)
     json.dump({e: {kk: (vv if kk != 'vs_shared' and kk != 'vs_best3' else {n: {a: b for a, b in c.items() if a != 'per_seed'} for n, c in vv.items()}) for kk, vv in v.items()} for e, v in out.items()},
